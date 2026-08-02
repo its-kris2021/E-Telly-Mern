@@ -4,7 +4,9 @@ import { Eye, EyeOff, Shield } from "lucide-react";
 import antipoloImg from "../images/antipolo.jpg";
 import logoImg from "../images/logtell1.png";
 
-const API_BASE = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 
 export default function LoginPage() {
   const navigate = useNavigate();

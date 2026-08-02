@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { connectSocket } from "../utils/socket";
 
-const API_BASE = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 const POLL_INTERVAL = 60_000;
 const REFRESH_COOLDOWN = 10; // seconds — anti-spam only, not rate-limiting
 

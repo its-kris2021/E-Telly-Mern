@@ -3,7 +3,9 @@ import { Mountain, MapPin, TriangleAlert, Siren, X } from "lucide-react";
 import { connectSocket } from "../../../utils/socket";
 import { useOfflineCache } from "../../../hooks/useOfflineCache";
 
-const API_BASE = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 
 const fetchLandslideAlerts = () =>
   fetch(`${API_BASE}/api/alerts`)

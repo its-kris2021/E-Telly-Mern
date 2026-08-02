@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 
-const API_BASE       = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE       = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 const VAPID_PUB_KEY  = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
 function urlBase64ToUint8Array(base64) {

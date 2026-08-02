@@ -9,7 +9,9 @@ import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 
-const API_BASE = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 
 const WAVES_SVG = (color, size = 20) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { X, Pencil, Trash2, UserCog, Copy, KeyRound, ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
 import ModalShell from "../components/ui/ModalShell";
 
-const API_BASE  = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE  = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 const PAGE_SIZE = 7;
 
 const ROLE_OPTIONS = [

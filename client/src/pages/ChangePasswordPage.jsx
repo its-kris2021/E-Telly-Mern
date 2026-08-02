@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Check, X as XIcon, Lock } from "lucide-react";
 
-const API_BASE = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 
 function checkStrength(pw) {
   return {

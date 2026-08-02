@@ -8,7 +8,9 @@ import FilterTabs from "../components/alerts/FilterTabs";
 import CreateAlertModal from "../components/alerts/CreateAlertModal";
 import DismissConfirmModal from "../components/alerts/DismissConfirmModal";
 
-const API_BASE = import.meta.env?.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 
 function fmtTime(ts) {
   if (!ts) return "—";
