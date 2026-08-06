@@ -40,6 +40,9 @@ import ReportFilter from "../components/map/ui/ReportFilter";
 // evacuation
 import EvacuationCentersLayer from "../components/map/evacuation/EvacuationCentersLayer";
 
+// AI predictions
+import AiPredictionLayer from "../components/map/predictions/AiPredictionLayer";
+
 // ui
 import HazardLegend from "../components/map/ui/HazardLegend";
 import BasemapPicker from "../components/map/ui/BasemapPicker";
@@ -112,6 +115,7 @@ const INITIAL_LAYERS = {
   landslide: false,
   reports: true,
   evacuation: false,
+  aiPredictions: false,
 };
 
 function buildAttribution(layers) {
@@ -130,6 +134,7 @@ function buildAttribution(layers) {
   }
   if (layers.earthquake) sources.add("USGS");
   if (layers.reports) sources.add("Community Reports");
+  if (layers.aiPredictions) sources.add("AI Prediction Model");
   return Array.from(sources).join(" · ");
 }
 
@@ -273,6 +278,7 @@ export default function HazardMapPage() {
           refreshTrigger={earthquakeRefresh}
         />
         <EvacuationCentersLayer visible={layers.evacuation} />
+        <AiPredictionLayer visible={layers.aiPredictions} />
         <UserLocationMarker onLocated={setUserPos} />
         <FlyToUser trigger={flyTrigger} userPos={userPos} />
         <FlyToTarget target={stormFlyTarget} />

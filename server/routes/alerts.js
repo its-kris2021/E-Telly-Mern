@@ -242,6 +242,58 @@ router.patch("/:id/resolve", protect, async (req, res) => {
   }
 });
 
+// PATCH /api/alerts/:id/confirm — admin confirms an AI-predicted hazard actually
+// occurred. Scoped to source:"ai" alerts only — this is the feedback signal
+// scripts/trainRiskModel.js reads back as fieldMetrics on the next retrain.
+router.patch("/:id/confirm", protect, async (req, res) => {
+  try {
+    const actorName = req.user.name ?? req.user.email ?? "admin";
+    const alert = await Alert.findOneAndUpdate(
+      { _id: req.params.id, source: "ai" },
+      {
+        confirmedOutcome: "true_positive",
+        confirmedBy: actorName,
+        confirmedAt: new Date(),
+        updatedAt: new Date(),
+        $push: { actionLog: { action: "resolved", by: actorName } },
+      },
+      { new: true },
+    );
+    if (!alert) return res.status(404).json({ error: "AI alert not found" });
+
+    req.app.get("io")?.emit("alert_updated", { id: req.params.id, confirmedOutcome: "true_positive" });
+    res.json({ ok: true, alert });
+  } catch (err) {
+    console.error("❌ Confirm AI alert:", err.message);
+    res.status(500).json({ error: "Failed to confirm alert" });
+  }
+});
+
+// PATCH /api/alerts/:id/reject — admin marks an AI-predicted hazard a false positive.
+router.patch("/:id/reject", protect, async (req, res) => {
+  try {
+    const actorName = req.user.name ?? req.user.email ?? "admin";
+    const alert = await Alert.findOneAndUpdate(
+      { _id: req.params.id, source: "ai" },
+      {
+        confirmedOutcome: "false_positive",
+        confirmedBy: actorName,
+        confirmedAt: new Date(),
+        updatedAt: new Date(),
+        $push: { actionLog: { action: "dismissed", by: actorName } },
+      },
+      { new: true },
+    );
+    if (!alert) return res.status(404).json({ error: "AI alert not found" });
+
+    req.app.get("io")?.emit("alert_updated", { id: req.params.id, confirmedOutcome: "false_positive" });
+    res.json({ ok: true, alert });
+  } catch (err) {
+    console.error("❌ Reject AI alert:", err.message);
+    res.status(500).json({ error: "Failed to reject alert" });
+  }
+});
+
 // PATCH /api/alerts/:id/reactivate — restore a dismissed alert (admin only)
 router.patch("/:id/reactivate", protect, async (req, res) => {
   try {

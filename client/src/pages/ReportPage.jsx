@@ -1,7 +1,7 @@
 import ReportTile from "../components/admin/ReportTile";
 import { useState, useEffect, useRef } from "react";
 import { connectSocket } from "../utils/socket";
-import { TrendingUp, Search, Download } from "lucide-react";
+import { TrendingUp, Search, Download, Siren } from "lucide-react";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -31,6 +31,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("ongoing");
   const [search, setSearch] = useState("");
+  const [rescueOnly, setRescueOnly] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
@@ -102,7 +103,7 @@ export default function ReportsPage() {
               report.emergencyType?.charAt(0).toUpperCase() +
               report.emergencyType?.slice(1),
             severity: report.severity?.toLowerCase(),
-            rescue: report.emergencyType === "rescue",
+            rescue: ["rescue", "sos"].includes(report.emergencyType?.toLowerCase()),
             description: report.description || "No description provided",
             location:
               report.location?.exactAddress ||
@@ -208,24 +209,32 @@ export default function ReportsPage() {
     return new Date(r.rawTimestamp).toDateString() === new Date().toDateString();
   }).length;
 
-  const filteredReports = reports.filter((r) => {
-    const tabMatch =
-      activeTab === "pending"  ? r.status === "pending"  :
-      activeTab === "ongoing"  ? r.status === "approved" :
-      activeTab === "resolved" ? r.status === "resolved" :
-      r.status === "rejected";
+  const filteredReports = reports
+    .filter((r) => {
+      const tabMatch =
+        activeTab === "pending"  ? r.status === "pending"  :
+        activeTab === "ongoing"  ? r.status === "approved" :
+        activeTab === "resolved" ? r.status === "resolved" :
+        r.status === "rejected";
 
-    if (!tabMatch) return false;
-    if (!search.trim()) return true;
+      if (!tabMatch) return false;
+      if (rescueOnly && !r.rescue) return false;
+      if (!search.trim()) return true;
 
-    const q = search.toLowerCase();
-    return (
-      r.type?.toLowerCase().includes(q) ||
-      r.description?.toLowerCase().includes(q) ||
-      (typeof r.location === "string" ? r.location : "").toLowerCase().includes(q) ||
-      r.reportedBy?.toLowerCase().includes(q)
-    );
-  });
+      const q = search.toLowerCase();
+      return (
+        r.type?.toLowerCase().includes(q) ||
+        r.description?.toLowerCase().includes(q) ||
+        (typeof r.location === "string" ? r.location : "").toLowerCase().includes(q) ||
+        r.reportedBy?.toLowerCase().includes(q)
+      );
+    })
+    // SOS/rescue reports surface first within the current tab, most recent first
+    // within each group.
+    .sort((a, b) => {
+      if (a.rescue !== b.rescue) return a.rescue ? -1 : 1;
+      return new Date(b.rawTimestamp || 0) - new Date(a.rawTimestamp || 0);
+    });
 
   if (loading) {
     return (
@@ -326,10 +335,23 @@ export default function ReportsPage() {
           <p className="text-2xl sm:text-3xl font-bold text-red-600">{highPriorityCount}</p>
         </div>
 
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <p className="text-xs sm:text-sm text-gray-600 mb-1">Rescue Needed</p>
+        {/* Rescue Needed — now a toggle that filters the list to SOS/rescue reports only */}
+        <button
+          type="button"
+          onClick={() => setRescueOnly((v) => !v)}
+          className={`text-left bg-white p-4 sm:p-6 rounded-xl shadow-sm border transition-colors ${
+            rescueOnly ? "border-orange-500 ring-2 ring-orange-200" : "border-gray-100 hover:border-orange-200"
+          }`}
+        >
+          <p className="text-xs sm:text-sm text-gray-600 mb-1 flex items-center gap-1">
+            <Siren size={13} className="text-orange-600" />
+            Rescue Needed
+          </p>
           <p className="text-2xl sm:text-3xl font-bold text-orange-600">{rescueNeededCount}</p>
-        </div>
+          {rescueOnly && (
+            <p className="text-[11px] text-orange-600 mt-1 font-medium">Showing SOS only · tap to clear</p>
+          )}
+        </button>
       </div>
 
       {/* Reports list */}
@@ -364,16 +386,30 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Search bar */}
-        <div className="relative mb-4">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by type, location, description, or reporter…"
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-          />
+        {/* Search bar + rescue-only toggle */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by type, location, description, or reporter…"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setRescueOnly((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border shrink-0 transition-colors ${
+              rescueOnly
+                ? "bg-orange-600 border-orange-600 text-white"
+                : "bg-white border-gray-300 text-gray-600 hover:border-orange-300"
+            }`}
+          >
+            <Siren size={14} />
+            SOS
+          </button>
         </div>
 
         <div className="space-y-3">
@@ -381,7 +417,9 @@ export default function ReportsPage() {
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <p className="text-gray-500">No reports found</p>
               <p className="text-sm text-gray-400 mt-2">
-                {search.trim()
+                {rescueOnly
+                  ? "No SOS/rescue reports in this tab"
+                  : search.trim()
                   ? "Try a different search term"
                   : activeTab === "pending"
                   ? "No pending reports — all reports have been reviewed"

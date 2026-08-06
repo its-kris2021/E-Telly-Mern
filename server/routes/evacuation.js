@@ -3,6 +3,7 @@ import EvacuationCenter from "../models/EvacuationCenter.js";
 import EvacuationLog from "../models/EvacuationLog.js";
 import User from "../models/user.js";
 import { protect, requireAdmin } from "../middleware/auth.js";
+import { BARANGAY_COORDS } from "../config/barangays.js";
 
 const router = express.Router();
 
@@ -140,26 +141,9 @@ const BARANGAY_HOTLINES = {
   private:      [],
 };
 
-// Barangay-level fallback when no exact name match exists
-const BARANGAY_COORDS = {
-  bagongnayon:  { lat: 14.6261, lng: 121.1687 },
-  beverlyhills: { lat: 14.5843, lng: 121.1582 },
-  calawis:      { lat: 14.6731, lng: 121.2423 },
-  cupang:       { lat: 14.6360, lng: 121.1239 },
-  dalig:        { lat: 14.5763, lng: 121.1820 },
-  delapaz:      { lat: 14.5901, lng: 121.1703 },
-  inarawan:     { lat: 14.6248, lng: 121.1950 },
-  mambugan:     { lat: 14.6206, lng: 121.1416 },
-  mayamot:      { lat: 14.6247, lng: 121.1233 },
-  muntindilaw:  { lat: 14.5989, lng: 121.1301 },
-  private:      { lat: 14.5973, lng: 121.1836 },
-  sanisidro:    { lat: 14.5916, lng: 121.1838 },
-  sanjose:      { lat: 14.6236, lng: 121.2598 },
-  sanjuan:      { lat: 14.6278, lng: 121.1770 },
-  sanluis:      { lat: 14.6043, lng: 121.1981 },
-  sanroque:     { lat: 14.5832, lng: 121.1719 },
-  santacruz:    { lat: 14.6157, lng: 121.1694 },
-};
+// Barangay-level fallback when no exact name match exists.
+// BARANGAY_COORDS now lives in ../config/barangays.js (shared with the hazard
+// rule engine and AI prediction engine) — imported above.
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED = [

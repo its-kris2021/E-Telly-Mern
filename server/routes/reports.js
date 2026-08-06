@@ -1,8 +1,78 @@
 import express from "express";
 import mongoose from "mongoose";
 import { sendAdminNotification } from "./push.js";
+import { BARANGAY_COORDS, resolveBarangayKey, nearestBarangayKey } from "../config/barangays.js";
+import { fetchWeatherSnapshot } from "../services/openMeteoCache.js";
+import { extractSnapshotFeatures } from "../services/weatherSnapshotService.js";
+import Alert from "../models/Alert.js";
 
 const router = express.Router();
+
+// Best-effort: attaches a weatherSnapshot (rainfall + soil moisture at the time
+// of submission) to a report so it can later be used as a labeled training
+// example for the risk model (see services/weatherSnapshotService.js for the
+// shared feature definitions). Runs after the response is already sent — must
+// never add latency or a new failure mode to report submission.
+async function attachWeatherSnapshot(reportId, { barangay, location, latitude, longitude }) {
+  try {
+    const freeTextBarangay = barangay || location?.barangay || "";
+    const lat = typeof latitude === "number" ? latitude : location?.coordinates?.latitude;
+    const lng = typeof longitude === "number" ? longitude : location?.coordinates?.longitude;
+
+    const barangayKey =
+      resolveBarangayKey(freeTextBarangay) ?? nearestBarangayKey(lat, lng);
+    if (!barangayKey) return; // no usable location — skip, don't fail the report
+
+    const coord = BARANGAY_COORDS[barangayKey];
+    const result = await fetchWeatherSnapshot(coord.lat, coord.lng);
+    if (!result) return;
+
+    const weatherSnapshot = {
+      barangay: barangayKey,
+      ...extractSnapshotFeatures(result.data),
+      capturedAt: new Date(),
+    };
+
+    await mongoose.connection.db
+      .collection("emergency_reports")
+      .updateOne({ _id: reportId }, { $set: { weatherSnapshot } });
+  } catch (err) {
+    console.error("[Reports] Weather snapshot attach failed:", err.message);
+  }
+}
+
+// Auto weak-label: a real report matching an unconfirmed AI-predicted alert
+// (same hazard type + barangay) is strong evidence the prediction was right.
+// This is what lets fieldMetrics (scripts/trainRiskModel.js) accumulate
+// without relying purely on an admin remembering to click "Confirm".
+async function autoConfirmMatchingAiAlert({ emergencyType, barangay, location, latitude, longitude }) {
+  try {
+    const freeTextBarangay = barangay || location?.barangay || "";
+    const lat = typeof latitude === "number" ? latitude : location?.coordinates?.latitude;
+    const lng = typeof longitude === "number" ? longitude : location?.coordinates?.longitude;
+    const barangayKey = resolveBarangayKey(freeTextBarangay) ?? nearestBarangayKey(lat, lng);
+    if (!barangayKey) return;
+
+    await Alert.updateOne(
+      {
+        source: "ai",
+        type: emergencyType,
+        barangays: barangayKey,
+        confirmedOutcome: "unconfirmed",
+        isActive: true,
+      },
+      {
+        $set: {
+          confirmedOutcome: "true_positive",
+          confirmedBy: "auto:linked_report",
+          confirmedAt: new Date(),
+        },
+      },
+    );
+  } catch (err) {
+    console.error("[Reports] Auto-confirm AI alert failed:", err.message);
+  }
+}
 
 // GET /api/reports/approved - Get approved reports
 router.get("/approved", async (req, res) => {
@@ -124,6 +194,10 @@ router.post("/create", async (req, res) => {
       reportId: result.insertedId,
       message: "Report created successfully",
     });
+
+    // Fire-and-forget — response already sent, must not block/fail submission.
+    attachWeatherSnapshot(result.insertedId, { barangay, location, latitude, longitude });
+    autoConfirmMatchingAiAlert({ emergencyType, barangay, location, latitude, longitude });
   } catch (error) {
     console.error("Error creating report:", error);
     res.status(500).json({

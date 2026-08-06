@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   X,
-  Droplets, Flame, Activity, Mountain, Heart, LifeBuoy, FileText,
+  Droplets, Flame, Activity, Mountain, Heart, LifeBuoy, Siren, FileText,
 } from "lucide-react";
 import ModalShell from "../ui/ModalShell";
 
@@ -53,6 +53,7 @@ export default function ReportTile({
     if (type === "Earthquake") return "text-orange-600 bg-orange-50";
     if (type === "Landslide")  return "text-amber-600 bg-amber-50";
     if (type === "Rescue")     return "text-red-600 bg-red-50";
+    if (type === "SOS")        return "text-red-600 bg-red-50";
     if (type === "Medical")    return "text-pink-600 bg-pink-50";
     return "text-blue-600 bg-blue-50";
   };
@@ -63,6 +64,7 @@ export default function ReportTile({
     if (type === "Earthquake") return Activity;
     if (type === "Landslide")  return Mountain;
     if (type === "Rescue")     return LifeBuoy;
+    if (type === "SOS")        return Siren;
     if (type === "Medical")    return Heart;
     return FileText;
   };

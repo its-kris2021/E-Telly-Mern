@@ -10,7 +10,7 @@ const actionLogSchema = new mongoose.Schema({
 const AlertSchema = new mongoose.Schema({
   source: {
     type: String,
-    enum: ["system", "residents", "CDRRMO", "Barangay", "USGS", "GDACS"],
+    enum: ["system", "residents", "CDRRMO", "Barangay", "USGS", "GDACS", "ai"],
     required: true,
   },
   type: {
@@ -45,6 +45,17 @@ const AlertSchema = new mongoose.Schema({
   linkedReportId: { type: mongoose.Schema.Types.ObjectId, default: null },
   isActive: { type: Boolean, default: true },
   actionLog: [actionLogSchema],
+
+  // ── AI-predicted alerts only (source: "ai") ──────────────────────────────
+  confidence:   { type: Number, default: null }, // model's predicted probability, 0-1
+  modelVersion: { type: String, default: null }, // e.g. "flood-v3" — see models/RiskModel.js
+  confirmedOutcome: {
+    type: String,
+    enum: ["unconfirmed", "true_positive", "false_positive"],
+    default: "unconfirmed",
+  },
+  confirmedBy: { type: String, default: null }, // admin userId/name, or "auto:linked_report" / "auto:expired_unconfirmed"
+  confirmedAt: { type: Date, default: null },
   _dedupeKey: { type: String, index: true },
   rawKey: { type: String, index: true },
   createdAt: { type: Date, default: Date.now },

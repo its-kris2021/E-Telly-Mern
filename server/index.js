@@ -16,6 +16,7 @@ import communityRoutes from "./routes/community.js";
 import pushRoutes, { sendNotificationToAll, sendAdminNotification } from "./routes/push.js";
 import syncRoutes from "./routes/sync.js";
 import uploadImagesRoutes from "./routes/uploadImages.js";
+import adminMetricsRoutes from "./routes/adminMetrics.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import Alert from "./models/Alert.js";
@@ -93,6 +94,7 @@ app.use("/api/community", communityRoutes);
 app.use("/api/push", pushRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/reports", uploadImagesRoutes);
+app.use("/api/admin", adminMetricsRoutes);
 app.use("/uploads", express.static(join(dirname(fileURLToPath(import.meta.url)), "uploads")));
 
 // Socket.IO

@@ -7,6 +7,7 @@ import AlertList from "../components/alerts/AlertList";
 import FilterTabs from "../components/alerts/FilterTabs";
 import CreateAlertModal from "../components/alerts/CreateAlertModal";
 import DismissConfirmModal from "../components/alerts/DismissConfirmModal";
+import ModelPerformancePanel from "../components/admin/ModelPerformancePanel";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -245,6 +246,9 @@ export default function AlertsPage() {
           </div>
         )}
       </div>}
+
+      {/* AI model performance — admin only */}
+      {isAdmin && <ModelPerformancePanel />}
 
       {/* Create Alert Modal */}
       {showModal && (

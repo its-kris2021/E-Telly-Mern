@@ -6,6 +6,7 @@ import {
   Activity,
   MapPin,
   FileWarning,
+  Sparkles,
   X,
 } from "lucide-react";
 
@@ -96,6 +97,19 @@ const EVACUATION_LEGEND = {
   ],
 };
 
+const AI_PREDICTIONS_LEGEND = {
+  key: "aiPredictions",
+  label: "AI Predictions",
+  Icon: Sparkles,
+  iconColor: "text-violet-500",
+  note: "Dashed marker = statistical prediction, not a confirmed hazard. Trained on report history + Open-Meteo rainfall/soil moisture.",
+  rows: [
+    { color: "#dc2626", label: "Critical / Evacuate — high predicted risk" },
+    { color: "#f59e0b", label: "Warning — elevated predicted risk" },
+    { color: "#3b82f6", label: "Watch — emerging predicted risk" },
+  ],
+};
+
 const ALL_LEGENDS = [
   FLOOD_LEGEND,
   TYPHOON_LEGEND,
@@ -103,6 +117,7 @@ const ALL_LEGENDS = [
   EARTHQUAKE_LEGEND,
   REPORTS_LEGEND,
   EVACUATION_LEGEND,
+  AI_PREDICTIONS_LEGEND,
 ];
 
 // ── HazardLegend ──────────────────────────────────────────────────────────

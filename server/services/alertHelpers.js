@@ -38,7 +38,10 @@ export async function upsertAlert({ _dedupeKey, source, ...alertData }) {
       $set: { ...alertData, source, _dedupeKey, updatedAt: new Date() },
       $setOnInsert: { createdAt: new Date(), isActive: true },
     },
-    { upsert: true },
+    // setDefaultsOnInsert ensures schema defaults (e.g. Alert.confirmedOutcome
+    // = "unconfirmed") are actually applied on a brand-new upsert — a raw
+    // updateOne upsert otherwise only writes the fields listed in $set/$setOnInsert.
+    { upsert: true, setDefaultsOnInsert: true },
   );
   return result.upsertedCount > 0; // true = brand-new alert
 }
@@ -55,6 +58,27 @@ export async function upsertSystemAlert(data) {
       tag:    `system-${data._dedupeKey}`,
       urgent: data.severity === "evacuate" || data.severity === "critical",
     }).catch((err) => console.error("[Push] System alert push failed:", err.message));
+  }
+
+  return isNew;
+}
+
+// AI-predicted hazards. Deliberately not marked urgent (even at high
+// confidence) and uses softer copy than upsertSystemAlert — these are
+// advisory/unconfirmed by definition, and should never carry the same
+// implied authority as a PAGASA-threshold-triggered evacuation alert.
+export async function upsertAiAlert(data) {
+  const isNew = await upsertAlert({ ...data, source: "ai" });
+
+  if (isNew) {
+    const barangayName = data.barangays?.[0] ?? "your area";
+    sendNotificationToAll({
+      title: `AI Prediction: ${data.title}`,
+      body: `Elevated ${data.type} risk detected in ${barangayName} — not yet confirmed. Tap for details.`,
+      url: "/hazard-map",
+      tag: `ai-${data._dedupeKey}`,
+      urgent: false,
+    }).catch((err) => console.error("[Push] AI alert push failed:", err.message));
   }
 
   return isNew;

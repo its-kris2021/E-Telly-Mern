@@ -7,6 +7,7 @@ import {
   Wind,
   Tent,
   Layers,
+  Sparkles,
   X,
 } from "lucide-react";
 import RainfallStrip from "../flood/RainfallStrip";
@@ -53,6 +54,13 @@ const LAYERS = [
     Icon: Tent,
     activeColor: "bg-green-500",
     ring: "ring-green-400",
+  },
+  {
+    key: "aiPredictions",
+    label: "AI Predictions",
+    Icon: Sparkles,
+    activeColor: "bg-violet-500",
+    ring: "ring-violet-400",
   },
 ];
 
