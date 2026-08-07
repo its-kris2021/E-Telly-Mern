@@ -8,17 +8,6 @@ import Alert from "../models/Alert.js";
 
 const router = express.Router();
 
-// Resolves a report's free-text barangay + coordinates down to a canonical
-// key (see config/barangays.js) — the single normalization step every
-// barangay-scoped feature (weather snapshots, AI alert matching, and
-// barangay_official report access) relies on.
-function resolveReportBarangayKey({ barangay, location, latitude, longitude }) {
-  const freeTextBarangay = barangay || location?.barangay || "";
-  const lat = typeof latitude === "number" ? latitude : location?.coordinates?.latitude;
-  const lng = typeof longitude === "number" ? longitude : location?.coordinates?.longitude;
-  return resolveBarangayKey(freeTextBarangay) ?? nearestBarangayKey(lat, lng);
-}
-
 // Best-effort: attaches a weatherSnapshot (rainfall + soil moisture at the time
 // of submission) to a report so it can later be used as a labeled training
 // example for the risk model (see services/weatherSnapshotService.js for the
@@ -26,7 +15,12 @@ function resolveReportBarangayKey({ barangay, location, latitude, longitude }) {
 // never add latency or a new failure mode to report submission.
 async function attachWeatherSnapshot(reportId, { barangay, location, latitude, longitude }) {
   try {
-    const barangayKey = resolveReportBarangayKey({ barangay, location, latitude, longitude });
+    const freeTextBarangay = barangay || location?.barangay || "";
+    const lat = typeof latitude === "number" ? latitude : location?.coordinates?.latitude;
+    const lng = typeof longitude === "number" ? longitude : location?.coordinates?.longitude;
+
+    const barangayKey =
+      resolveBarangayKey(freeTextBarangay) ?? nearestBarangayKey(lat, lng);
     if (!barangayKey) return; // no usable location — skip, don't fail the report
 
     const coord = BARANGAY_COORDS[barangayKey];
@@ -53,7 +47,10 @@ async function attachWeatherSnapshot(reportId, { barangay, location, latitude, l
 // without relying purely on an admin remembering to click "Confirm".
 async function autoConfirmMatchingAiAlert({ emergencyType, barangay, location, latitude, longitude }) {
   try {
-    const barangayKey = resolveReportBarangayKey({ barangay, location, latitude, longitude });
+    const freeTextBarangay = barangay || location?.barangay || "";
+    const lat = typeof latitude === "number" ? latitude : location?.coordinates?.latitude;
+    const lng = typeof longitude === "number" ? longitude : location?.coordinates?.longitude;
+    const barangayKey = resolveBarangayKey(freeTextBarangay) ?? nearestBarangayKey(lat, lng);
     if (!barangayKey) return;
 
     await Alert.updateOne(
@@ -159,10 +156,6 @@ router.post("/create", async (req, res) => {
       latitude, longitude, userName, phoneNumber,
       images: Array.isArray(images) ? images.filter((s) => typeof s === "string" && s.startsWith("http")) : [],
       barangay: barangay || "",
-      // Canonical key — resolved once at write time so barangay_official
-      // report access (server/middleware/auth.js) can filter reliably
-      // instead of matching against inconsistent free text.
-      barangayKey: resolveReportBarangayKey({ barangay, location, latitude, longitude }),
       timestamp: new Date(),
       status: "pending",
       source: source || "online",

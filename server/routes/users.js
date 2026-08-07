@@ -2,18 +2,8 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import User from "../models/user.js";
 import { protect, requireAdmin } from "../middleware/auth.js";
-import { BARANGAY_KEYS } from "../config/barangays.js";
 
 const router = express.Router();
-
-// barangay_official accounts must have a valid assignedBarangay; every other
-// role must not carry one, so report-scoping (middleware/auth.js) never sees
-// a stale value left over from a role change.
-function resolveAssignedBarangay(role, assignedBarangay) {
-  if (role !== "barangay_official") return null;
-  if (!BARANGAY_KEYS.includes(assignedBarangay)) return undefined; // invalid
-  return assignedBarangay;
-}
 
 // ── Strong password generator (server-side, used for admin resets) ────────────
 function generateStrongPassword() {
@@ -55,15 +45,11 @@ router.get("/", protect, requireAdmin, async (req, res) => {
 
 // POST /api/users — create user (admin only)
 router.post("/", protect, requireAdmin, async (req, res) => {
-  const { email, firstName, lastName, role, password, contactEmail, assignedBarangay } = req.body;
+  const { email, firstName, lastName, role, password, contactEmail } = req.body;
   try {
     const existing = await User.findOne({ email });
     if (existing)
       return res.status(400).json({ message: "Email already exists" });
-
-    const resolvedBarangay = resolveAssignedBarangay(role, assignedBarangay);
-    if (resolvedBarangay === undefined)
-      return res.status(400).json({ message: "A valid barangay assignment is required for barangay officials" });
 
     const hashed = await bcrypt.hash(password, 12);
     const fullName = `${firstName} ${lastName}`.trim();
@@ -73,7 +59,6 @@ router.post("/", protect, requireAdmin, async (req, res) => {
       email,
       password: hashed,
       role,
-      assignedBarangay: resolvedBarangay,
       mustChangePassword: true,
       contactEmail: contactEmail?.trim() || "",
     });
@@ -83,7 +68,6 @@ router.post("/", protect, requireAdmin, async (req, res) => {
       name: newUser.name,
       email: newUser.email,
       role: newUser.role,
-      assignedBarangay: newUser.assignedBarangay,
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to create user" });
@@ -92,19 +76,10 @@ router.post("/", protect, requireAdmin, async (req, res) => {
 
 // PUT /api/users/:id — update user (admin only)
 router.put("/:id", protect, requireAdmin, async (req, res) => {
-  const { firstName, lastName, role, password, contactEmail, assignedBarangay } = req.body;
+  const { firstName, lastName, role, password, contactEmail } = req.body;
   try {
-    const resolvedBarangay = resolveAssignedBarangay(role, assignedBarangay);
-    if (resolvedBarangay === undefined)
-      return res.status(400).json({ message: "A valid barangay assignment is required for barangay officials" });
-
     const fullName = `${firstName} ${lastName}`.trim();
-    const updateData = {
-      name: fullName,
-      role,
-      assignedBarangay: resolvedBarangay,
-      contactEmail: contactEmail?.trim() || "",
-    };
+    const updateData = { name: fullName, role, contactEmail: contactEmail?.trim() || "" };
 
     if (password) {
       updateData.password = await bcrypt.hash(password, 12);

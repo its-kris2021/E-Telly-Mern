@@ -13,7 +13,7 @@ const router = express.Router();
 
 function signJwt(user) {
   return jwt.sign(
-    { id: user._id, name: user.name, role: user.role, assignedBarangay: user.assignedBarangay ?? null },
+    { id: user._id, name: user.name, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: "1d" },
   );
@@ -25,7 +25,6 @@ function userPayload(user) {
     name:               user.name,
     email:              user.email,
     role:               user.role,
-    assignedBarangay:   user.assignedBarangay ?? null,
     address:            user.address || "",
     mustChangePassword: user.mustChangePassword ?? false,
   };
