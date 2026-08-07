@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Pencil, Trash2, UserCog, Copy, KeyRound, ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
 import ModalShell from "../components/ui/ModalShell";
+import { BARANGAY_OPTIONS, barangayLabel } from "../constants/barangays";
 
 const API_BASE  = import.meta.env.PROD
   ? window.location.origin
@@ -49,7 +50,7 @@ export default function ManageUsersPage() {
   const filterRef = useRef(null);
 
   const [formData, setFormData] = useState({
-    email: "", firstName: "", lastName: "", role: "barangay_official", password: "",
+    email: "", firstName: "", lastName: "", role: "barangay_official", password: "", assignedBarangay: "",
   });
 
   useEffect(() => {
@@ -209,7 +210,7 @@ export default function ManageUsersPage() {
     setGeneratedPassword("");
     setShowPassword(false);
     setPasswordTouched(false);
-    setFormData({ email: "", firstName: "", lastName: "", role: "barangay_official", password: "" });
+    setFormData({ email: "", firstName: "", lastName: "", role: "barangay_official", password: "", assignedBarangay: "" });
     setIsModalOpen(true);
   };
 
@@ -221,6 +222,7 @@ export default function ManageUsersPage() {
     setFormData({
       email: user.email, firstName: getFirstName(user.name),
       lastName: getLastName(user.name), role: user.role, password: "",
+      assignedBarangay: user.assignedBarangay || "",
     });
     setIsModalOpen(true);
     setMenuState(null);
@@ -450,6 +452,11 @@ export default function ManageUsersPage() {
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getRoleBadge(user.role)}`}>
                     {getRoleLabel(user.role)}
                   </span>
+                  {user.role === "barangay_official" && (
+                    <span className="block text-xs text-gray-500 mt-1">
+                      {user.assignedBarangay ? barangayLabel(user.assignedBarangay) : "No barangay assigned"}
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <button
@@ -510,6 +517,11 @@ export default function ManageUsersPage() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
                 <p className="text-xs text-gray-500 font-mono truncate mt-0.5">{user.email}</p>
+                {user.role === "barangay_official" && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {user.assignedBarangay ? barangayLabel(user.assignedBarangay) : "No barangay assigned"}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getRoleBadge(user.role)}`}>
@@ -634,7 +646,11 @@ export default function ManageUsersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                   <select
                     value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      role: e.target.value,
+                      assignedBarangay: e.target.value === "barangay_official" ? formData.assignedBarangay : "",
+                    })}
                     className="text-sm w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 cursor-pointer"
                     disabled={isLoading}
                   >
@@ -642,6 +658,26 @@ export default function ManageUsersPage() {
                     <option value="admin">Admin</option>
                   </select>
                 </div>
+
+                {formData.role === "barangay_official" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Barangay</label>
+                    <select
+                      value={formData.assignedBarangay}
+                      onChange={(e) => setFormData({ ...formData, assignedBarangay: e.target.value })}
+                      className="text-sm w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 cursor-pointer"
+                      required disabled={isLoading}
+                    >
+                      <option value="" disabled>Select a barangay</option>
+                      {BARANGAY_OPTIONS.map((b) => (
+                        <option key={b.value} value={b.value}>{b.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      This official will only see and act on reports from this barangay.
+                    </p>
+                  </div>
+                )}
 
                 {!isEditMode && (
                   <div>

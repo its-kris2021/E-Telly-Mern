@@ -20,7 +20,12 @@ import adminMetricsRoutes from "./routes/adminMetrics.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import Alert from "./models/Alert.js";
-import { protect, requireAdminOrBarangay } from "./middleware/auth.js";
+import {
+  protect,
+  requireAdminOrBarangay,
+  reportBarangayFilter,
+  rejectIfOutsideAssignedBarangay,
+} from "./middleware/auth.js";
 import rateLimit from "express-rate-limit";
 
 dotenv.config();
@@ -134,7 +139,7 @@ app.get("/api/reports", protect, requireAdminOrBarangay, async (req, res) => {
       return res.status(500).json({ success: false, error: "Database not connected" });
     const reports = await mongoose.connection.db
       .collection("emergency_reports")
-      .find({})
+      .find(reportBarangayFilter(req))
       .sort({ timestamp: -1 })
       .toArray();
     res.json({ success: true, reports });
@@ -187,9 +192,12 @@ app.post("/api/reports/update-status", protect, requireAdminOrBarangay, async (r
     if (!VALID_STATUSES.includes(status))
       return res.status(400).json({ success: false, error: "Invalid status value" });
 
-    const report = status === "approved"
-      ? await mongoose.connection.db.collection("emergency_reports").findOne({ _id: new mongoose.Types.ObjectId(reportId) })
-      : null;
+    const report = await mongoose.connection.db
+      .collection("emergency_reports")
+      .findOne({ _id: new mongoose.Types.ObjectId(reportId) });
+    if (!report)
+      return res.status(404).json({ success: false, error: "Report not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, report.barangayKey)) return;
 
     const result = await mongoose.connection.db
       .collection("emergency_reports")
@@ -268,6 +276,14 @@ app.post("/api/reports/resolve", protect, requireAdminOrBarangay, async (req, re
 
     if (!mongoose.Types.ObjectId.isValid(reportId))
       return res.status(400).json({ success: false, error: "Invalid report ID" });
+
+    const existingReport = await mongoose.connection.db
+      .collection("emergency_reports")
+      .findOne({ _id: new mongoose.Types.ObjectId(reportId) }, { projection: { barangayKey: 1 } });
+    if (!existingReport)
+      return res.status(404).json({ success: false, error: "Report not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, existingReport.barangayKey)) return;
+
     const result = await mongoose.connection.db
       .collection("emergency_reports")
       .updateOne(

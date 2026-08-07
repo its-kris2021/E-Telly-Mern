@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
 import { protect } from "../middleware/auth.js";
 import { sendNotificationToAll } from "./push.js";
+import { BARANGAY_KEYS, resolveBarangayKey } from "../config/barangays.js";
 
 const router = express.Router();
 
@@ -96,6 +97,14 @@ router.post("/", protect, async (req, res) => {
     if (isManual) {
       const db = mongoose.connection.db;
       const severityMap = { evacuate: "high", warning: "medium", watch: "low" };
+      // Canonical barangay for scoping (server/middleware/auth.js): prefer an
+      // explicit barangays[] entry, fall back to parsing the location string,
+      // then to the creating official's own assignment.
+      const barangayKey =
+        (Array.isArray(barangays) && barangays.find((b) => BARANGAY_KEYS.includes(b))) ??
+        resolveBarangayKey(location) ??
+        (req.user.role === "barangay_official" ? req.user.assignedBarangay : null) ??
+        null;
       const reportDoc = {
         emergencyType: type ?? "other",
         severity:      severityMap[effectiveSeverity] ?? "medium",
@@ -103,6 +112,7 @@ router.post("/", protect, async (req, res) => {
         location:  { exactAddress: location ?? "Antipolo City, Rizal" },
         latitude:  lat ?? null,
         longitude: lng ?? null,
+        barangayKey,
         userName:  source ?? "CDRRMO",
         timestamp: new Date(),
         status:    "approved",

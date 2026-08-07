@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { BARANGAY_KEYS } from "../config/barangays.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -9,6 +10,13 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["admin", "user", "barangay_official"],
       default: "user",
+    },
+    // Only meaningful for role: "barangay_official" — scopes which barangay's
+    // reports they can view/act on. Null for admin/user accounts.
+    assignedBarangay: {
+      type: String,
+      enum: [...BARANGAY_KEYS, null],
+      default: null,
     },
     mustChangePassword: { type: Boolean, default: false },
     contactEmail: { type: String, default: "" },
