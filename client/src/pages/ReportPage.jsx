@@ -200,11 +200,12 @@ export default function ReportsPage() {
 
   const tabCount = { pending: pendingCount, ongoing: ongoingCount, resolved: resolvedCount, rejected: rejectedCount };
 
-  const ongoingReports    = reports.filter((r) => r.status === "approved");
-  const totalReports      = ongoingReports.length;
-  const highPriorityCount = ongoingReports.filter((r) => r.severity === "high").length;
-  const rescueNeededCount = ongoingReports.filter((r) => r.rescue === true).length;
-  const newTodayCount     = ongoingReports.filter((r) => {
+  // Active = still actionable (Pending + Ongoing) — excludes closed-out Resolved/Rejected cases.
+  const activeReports     = reports.filter((r) => r.status === "pending" || r.status === "approved");
+  const totalReports      = activeReports.length;
+  const highPriorityCount = activeReports.filter((r) => r.severity === "high").length;
+  const rescueNeededCount = activeReports.filter((r) => r.rescue === true).length;
+  const newTodayCount     = activeReports.filter((r) => {
     if (!r.rawTimestamp) return false;
     return new Date(r.rawTimestamp).toDateString() === new Date().toDateString();
   }).length;
@@ -365,7 +366,7 @@ export default function ReportsPage() {
           {TABS.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => { setActiveTab(tab.key); setRescueOnly(false); }}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap shrink-0 ${
                 activeTab === tab.key
                   ? "border-red-500 text-red-600"

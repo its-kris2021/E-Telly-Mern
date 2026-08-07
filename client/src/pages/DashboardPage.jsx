@@ -4,7 +4,6 @@ import {
   Bell,
   Map,
   MapPin,
-  Users,
   Volume2,
   InfoIcon,
   HandHelpingIcon,
@@ -67,14 +66,6 @@ const modules = [
     href: "/safety-tips",
     color: "bg-indigo-700",
   },
-  {
-    title: "Manage Users",
-    description: "Manage user accounts and permissions",
-    icon: Users,
-    href: "/manage-users",
-    color: "bg-gray-600",
-    adminOnly: true,
-  },
 ];
 
 const ALERT_LEFT_BORDER = {
@@ -125,7 +116,6 @@ export default function DashboardPage() {
 
   const stored = localStorage.getItem("user");
   const user = stored ? JSON.parse(stored) : null;
-  const userRole = user?.role ?? null;
 
   const fetchReports = useCallback(() => {
     fetch(`${API_BASE}/api/reports`, {
@@ -152,9 +142,7 @@ export default function DashboardPage() {
     };
   }, [fetchReports]);
 
-  const visibleModules = modules.filter(
-    (m) => !m.adminOnly || userRole === "admin",
-  );
+  const visibleModules = modules;
   const pendingReports = reports.filter(
     (r) => (r.status || "pending") === "pending",
   );

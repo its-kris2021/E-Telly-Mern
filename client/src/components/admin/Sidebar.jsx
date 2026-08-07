@@ -1,51 +1,15 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Volume2,
-  Bell,
-  Map,
-  Droplets,
-  MapPin,
-  Users,
-  Menu,
-  ChevronLeft,
-  Dam,
-  InfoIcon,
-  HandHelpingIcon,
-} from "lucide-react";
-
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Bell, label: "Alerts", href: "/alerts" },
-  { icon: Volume2, label: "Reports", href: "/reports" },
-  { icon: Map, label: "Hazard Map", href: "/hazard-map" },
-  { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
-  {
-    icon: HandHelpingIcon,
-    label: "Community Sharing",
-    href: "/community-sharing",
-  },
-  { icon: InfoIcon, label: "Safety Tips", href: "/safety-tips" },
-  {
-    icon: Users,
-    label: "Manage Users",
-    href: "/manage-users",
-    adminOnly: true,
-  },
-];
+import { Menu, ChevronLeft } from "lucide-react";
+import { ROLE_NAV_ITEMS, ROLE_LABELS, getUserRole } from "../../config/roleModules";
 
 export default function Sidebar() {
   const { pathname } = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
-  const userRole = localStorage.getItem("user")
-    ? JSON.parse(localStorage.getItem("user")).role
-    : null;
-
-  const visibleMenuItems = menuItems.filter(
-    (item) => !item.adminOnly || userRole === "admin",
-  );
+  const userRole = getUserRole();
+  const visibleMenuItems = ROLE_NAV_ITEMS[userRole] || [];
+  const roleLabel = ROLE_LABELS[userRole] || "Portal";
 
   return (
     <>
@@ -80,7 +44,7 @@ export default function Sidebar() {
           <div className="mb-8 px-3 flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-bold text-red-600">E-Telly</h1>
-              <p className="text-xs text-gray-500 mt-1">Admin Dashboard</p>
+              <p className="text-xs text-gray-500 mt-1">{roleLabel}</p>
             </div>
             <button
               onClick={() => setIsOpen(false)}

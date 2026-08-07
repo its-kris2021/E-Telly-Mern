@@ -2,21 +2,14 @@ import { useState } from "react";
 import { User, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import NotificationToggle from "../pwa/NotificationToggle";
+import { ROLE_LABELS, getUserRole } from "../../config/roleModules";
 
 export default function Header({ userEmail = "", onLogout }) {
   const navigate = useNavigate();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const userRole = localStorage.getItem("user")
-    ? JSON.parse(localStorage.getItem("user")).role
-    : null;
-
-  const roleLabel =
-    userRole === "admin"
-      ? "Admin"
-      : userRole === "barangay_official"
-        ? "Barangay Official"
-        : "User";
+  const userRole = getUserRole();
+  const roleLabel = ROLE_LABELS[userRole] || "User";
 
   const handleLogout = () => {
     localStorage.removeItem("token");

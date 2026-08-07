@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Shield } from "lucide-react";
 import antipoloImg from "../images/antipolo.jpg";
 import logoImg from "../images/logtell1.png";
+import { getHomePath } from "../config/roleModules";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -43,7 +44,7 @@ export default function LoginPage() {
         if (data.user.mustChangePassword) {
           navigate("/change-password");
         } else {
-          navigate("/dashboard");
+          navigate(getHomePath(data.user.role));
         }
       }
     } catch {

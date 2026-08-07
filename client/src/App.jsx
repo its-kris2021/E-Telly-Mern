@@ -15,6 +15,7 @@ import SafetyTipsPage from "./pages/SafetyTipsPage";
 import SafetyTipDetailPage from "./pages/SafetyTipDetailPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 import ReportsPage from "./pages/ReportPage";
+import { getUserRole, getHomePath } from "./config/roleModules";
 
 // ── Token validation ───────────────────────────────────────────────────────────
 // Checks both presence AND expiry of the JWT so stale dev-session tokens
@@ -43,14 +44,25 @@ function isTokenValid() {
 
 // ── Route guards ──────────────────────────────────────────────────────────────
 
-// Redirect to dashboard if already logged in (e.g. hitting /login again)
+// Redirect to the caller's role-appropriate home if already logged in (e.g. hitting /login again)
 function PublicRoute({ children }) {
-  return isTokenValid() ? <Navigate to="/dashboard" replace /> : children;
+  return isTokenValid() ? (
+    <Navigate to={getHomePath(getUserRole())} replace />
+  ) : (
+    children
+  );
 }
 
 // Redirect to login if NOT logged in or token expired
 function ProtectedRoute({ children }) {
   return isTokenValid() ? children : <Navigate to="/login" replace />;
+}
+
+// Redirect away if the logged-in role isn't permitted for this route
+function RoleGate({ roles, children }) {
+  if (!roles) return children;
+  const role = getUserRole();
+  return roles.includes(role) ? children : <Navigate to={getHomePath(role)} replace />;
 }
 
 // Auth required but no AdminLayout — used for /change-password
@@ -97,7 +109,9 @@ function SessionExpiryBanner() {
 }
 
 // ── Layout wrapper (moved outside App to prevent remounts on re-render) ───────
-function ProtectedLayout({ Page }) {
+// `roles` (optional array) restricts this route to specific roles; anyone else
+// is bounced to their own role's home page.
+function ProtectedLayout({ Page, roles }) {
   const userEmail = localStorage.getItem("user")
     ? JSON.parse(localStorage.getItem("user")).email
     : "";
@@ -109,13 +123,18 @@ function ProtectedLayout({ Page }) {
 
   return (
     <ProtectedRoute>
-      <SessionExpiryBanner />
-      <AdminLayout userEmail={userEmail} onLogout={handleLogout}>
-        <Page />
-      </AdminLayout>
+      <RoleGate roles={roles}>
+        <SessionExpiryBanner />
+        <AdminLayout userEmail={userEmail} onLogout={handleLogout}>
+          <Page />
+        </AdminLayout>
+      </RoleGate>
     </ProtectedRoute>
   );
 }
+
+// Roles that use the disaster-response portal (Dashboard, Alerts, Reports, etc.)
+const OPS_ROLES = ["admin", "barangay_official"];
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -123,8 +142,16 @@ export default function App() {
     <BrowserRouter>
       <InstallPrompt />
       <Routes>
-        {/* Root → login or dashboard depending on auth */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* Root → login, or the caller's role home if already authenticated */}
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to={isTokenValid() ? getHomePath(getUserRole()) : "/login"}
+              replace
+            />
+          }
+        />
 
         {/* Public — redirect to dashboard if already authenticated */}
         <Route
@@ -143,39 +170,43 @@ export default function App() {
           element={<AuthOnlyRoute Page={ChangePasswordPage} />}
         />
 
-        {/* Protected pages */}
+        {/* Protected pages — disaster-response ops (Admin + Barangay Official) */}
         <Route
           path="/dashboard"
-          element={<ProtectedLayout Page={DashboardPage} />}
+          element={<ProtectedLayout Page={DashboardPage} roles={OPS_ROLES} />}
         />
-        <Route path="/alerts" element={<ProtectedLayout Page={AlertsPage} />} />
+        <Route
+          path="/alerts"
+          element={<ProtectedLayout Page={AlertsPage} roles={OPS_ROLES} />}
+        />
         <Route
           path="/reports"
-          element={<ProtectedLayout Page={ReportsPage} />}
+          element={<ProtectedLayout Page={ReportsPage} roles={OPS_ROLES} />}
         />
         <Route
           path="/hazard-map"
-          element={<ProtectedLayout Page={HazardMapPage} />}
+          element={<ProtectedLayout Page={HazardMapPage} roles={OPS_ROLES} />}
         />
         <Route
           path="/evacuation"
-          element={<ProtectedLayout Page={EvacuationPage} />}
+          element={<ProtectedLayout Page={EvacuationPage} roles={OPS_ROLES} />}
         />
         <Route
           path="/community-sharing"
-          element={<ProtectedLayout Page={CommunitySharingPage} />}
+          element={<ProtectedLayout Page={CommunitySharingPage} roles={OPS_ROLES} />}
         />
         <Route
           path="/safety-tips"
-          element={<ProtectedLayout Page={SafetyTipsPage} />}
+          element={<ProtectedLayout Page={SafetyTipsPage} roles={OPS_ROLES} />}
         />
         <Route
           path="/safety-tips/:slug"
-          element={<ProtectedLayout Page={SafetyTipDetailPage} />}
+          element={<ProtectedLayout Page={SafetyTipDetailPage} roles={OPS_ROLES} />}
         />
+
         <Route
           path="/manage-users"
-          element={<ProtectedLayout Page={ManageUsersPage} />}
+          element={<ProtectedLayout Page={ManageUsersPage} roles={["admin"]} />}
         />
 
         {/* Catch-all */}

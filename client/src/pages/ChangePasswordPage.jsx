@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Check, X as XIcon, Lock } from "lucide-react";
+import { getHomePath } from "../config/roleModules";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -77,7 +78,7 @@ export default function ChangePasswordPage() {
         JSON.stringify({ ...stored, mustChangePassword: false }),
       );
 
-      navigate("/dashboard");
+      navigate(getHomePath(stored.role));
     } catch (err) {
       setError(err.message || "Failed to change password.");
     } finally {
