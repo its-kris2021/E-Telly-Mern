@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { BARANGAY_KEYS } from "../config/barangays.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -7,8 +8,18 @@ const userSchema = new mongoose.Schema(
     password: { type: String, default: '' },
     role: {
       type: String,
-      enum: ["admin", "user", "barangay_official"],
+      // "admin" is kept temporarily during the system_admin/cdrrmo role
+      // split migration (scripts/migrateAdminRoles.js) — drop it once no
+      // documents use it any more.
+      enum: ["admin", "system_admin", "cdrrmo", "barangay_official", "user"],
       default: "user",
+    },
+    // Only meaningful for role: "barangay_official" — scopes reports/alerts/
+    // evacuation-center access to this barangay. Null for every other role.
+    assignedBarangay: {
+      type: String,
+      enum: [...BARANGAY_KEYS, null],
+      default: null,
     },
     mustChangePassword: { type: Boolean, default: false },
     contactEmail: { type: String, default: "" },

@@ -3,6 +3,7 @@ import { AlertTriangle, X } from "lucide-react";
 import ModalShell from "../ui/ModalShell";
 import { SEVERITY_CONFIG } from "../../hooks/useAlerts";
 import LocationPicker from "./LocationPicker/LocationPicker";
+import { getUserRole } from "../../config/roleModules";
 
 const INCIDENT_TYPES = [
   { value: "rescue", label: "Rescue", color: "#ef4444" },
@@ -16,10 +17,9 @@ const INCIDENT_TYPES = [
 const SEVERITIES = ["watch", "warning", "evacuate"];
 
 export default function CreateAlertModal({ onClose, onCreated }) {
-  const stored = localStorage.getItem("user");
-  const userRole = stored ? JSON.parse(stored).role : "admin";
-  const isAdmin = userRole === "admin";
-
+  // No fail-open default — an unrecognized/missing role gets the more
+  // conservative "Barangay" label/behavior rather than silently assuming CDRRMO.
+  const isAdmin = getUserRole() === "cdrrmo";
   const defaultSource = isAdmin ? "CDRRMO" : "Barangay";
 
   const [form, setForm] = useState({

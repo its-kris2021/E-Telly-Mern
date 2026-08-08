@@ -21,7 +21,7 @@ if (existing) {
     name: "Rafael",
     email: "local@etelly.com",
     password: hashed,
-    role: "admin",
+    role: "system_admin",
   });
   console.log("✅ Admin account created!");
   console.log("   Email:    local@etelly.com");

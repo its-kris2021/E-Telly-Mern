@@ -1,7 +1,8 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import User from "../models/user.js";
-import { protect, requireAdmin } from "../middleware/auth.js";
+import { protect, requireRole } from "../middleware/auth.js";
+import { BARANGAY_KEYS } from "../config/barangays.js";
 
 const router = express.Router();
 
@@ -31,8 +32,32 @@ function generateStrongPassword() {
   return chars.sort(() => Math.random() - 0.5).join("");
 }
 
-// GET /api/users — list all users (admin only)
-router.get("/", protect, requireAdmin, async (req, res) => {
+// Validates/derives assignedBarangay for a given target role: required + must
+// be a known barangay key for "barangay_official", must be absent for every
+// other role (residents/system_admin/cdrrmo have no barangay assignment).
+// Returns { ok: true, value } or { ok: false, message }.
+function resolveAssignedBarangay(role, assignedBarangay) {
+  if (role === "barangay_official") {
+    if (!assignedBarangay || !BARANGAY_KEYS.includes(assignedBarangay)) {
+      return { ok: false, message: "A valid assigned barangay is required for Barangay Official accounts." };
+    }
+    return { ok: true, value: assignedBarangay };
+  }
+  return { ok: true, value: null };
+}
+
+// True if `excludeId` is currently a system_admin AND no other system_admin
+// account exists — i.e. deleting/demoting/rejecting it would leave the
+// platform with zero System Admins and no recovery path short of a manual
+// DB edit. Callers use this to block that specific action, not any action
+// on a system_admin in general.
+async function isOnlySystemAdmin(excludeId) {
+  const others = await User.countDocuments({ role: "system_admin", _id: { $ne: excludeId } });
+  return others === 0;
+}
+
+// GET /api/users — list all users (system admin only)
+router.get("/", protect, requireRole("system_admin"), async (req, res) => {
   try {
     const users = await User.find()
       .select("-password")
@@ -43,13 +68,23 @@ router.get("/", protect, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/users — create user (admin only)
-router.post("/", protect, requireAdmin, async (req, res) => {
-  const { email, firstName, lastName, role, password, contactEmail } = req.body;
+// POST /api/users — create user (system admin only)
+router.post("/", protect, requireRole("system_admin"), async (req, res) => {
+  const { firstName, lastName, role, password, contactEmail, assignedBarangay } = req.body;
+  // Normalize to lowercase — matches every other account-creation path
+  // (register, google) and how routes/auth.js always queries at login.
+  // Without this, an admin-created account with any uppercase letter in its
+  // email (the auto-generated "LastF@etelly.com" pattern always has one)
+  // could never log in — the stored email just wouldn't match the lookup.
+  const email = req.body.email?.trim().toLowerCase();
   try {
     const existing = await User.findOne({ email });
     if (existing)
       return res.status(400).json({ message: "Email already exists" });
+
+    const barangayResult = resolveAssignedBarangay(role, assignedBarangay);
+    if (!barangayResult.ok)
+      return res.status(400).json({ message: barangayResult.message });
 
     const hashed = await bcrypt.hash(password, 12);
     const fullName = `${firstName} ${lastName}`.trim();
@@ -59,6 +94,7 @@ router.post("/", protect, requireAdmin, async (req, res) => {
       email,
       password: hashed,
       role,
+      assignedBarangay: barangayResult.value,
       mustChangePassword: true,
       contactEmail: contactEmail?.trim() || "",
     });
@@ -68,18 +104,35 @@ router.post("/", protect, requireAdmin, async (req, res) => {
       name: newUser.name,
       email: newUser.email,
       role: newUser.role,
+      assignedBarangay: newUser.assignedBarangay,
     });
   } catch (err) {
     res.status(500).json({ message: "Failed to create user" });
   }
 });
 
-// PUT /api/users/:id — update user (admin only)
-router.put("/:id", protect, requireAdmin, async (req, res) => {
-  const { firstName, lastName, role, password, contactEmail } = req.body;
+// PUT /api/users/:id — update user (system admin only)
+router.put("/:id", protect, requireRole("system_admin"), async (req, res) => {
+  const { firstName, lastName, role, password, contactEmail, assignedBarangay } = req.body;
   try {
+    const before = await User.findById(req.params.id).select("-password");
+    if (!before) return res.status(404).json({ message: "User not found" });
+
+    if (before.role === "system_admin" && role !== "system_admin" && (await isOnlySystemAdmin(before._id))) {
+      return res.status(409).json({ message: "Cannot change the role of the only remaining System Admin account." });
+    }
+
+    const barangayResult = resolveAssignedBarangay(role, assignedBarangay);
+    if (!barangayResult.ok)
+      return res.status(400).json({ message: barangayResult.message });
+
     const fullName = `${firstName} ${lastName}`.trim();
-    const updateData = { name: fullName, role, contactEmail: contactEmail?.trim() || "" };
+    const updateData = {
+      name: fullName,
+      role,
+      assignedBarangay: barangayResult.value,
+      contactEmail: contactEmail?.trim() || "",
+    };
 
     if (password) {
       updateData.password = await bcrypt.hash(password, 12);
@@ -89,17 +142,15 @@ router.put("/:id", protect, requireAdmin, async (req, res) => {
       new: true,
     }).select("-password");
 
-    if (!updated) return res.status(404).json({ message: "User not found" });
-
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: "Failed to update user" });
   }
 });
 
-// POST /api/users/:id/reset-password — admin resets a user's password
+// POST /api/users/:id/reset-password — system admin resets a user's password
 // Returns the plaintext temp password once so the admin can share it.
-router.post("/:id/reset-password", protect, requireAdmin, async (req, res) => {
+router.post("/:id/reset-password", protect, requireRole("system_admin"), async (req, res) => {
   try {
     const tempPassword = generateStrongPassword();
     const hashed = await bcrypt.hash(tempPassword, 12);
@@ -118,9 +169,15 @@ router.post("/:id/reset-password", protect, requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/users/:id — delete user (admin only)
-router.delete("/:id", protect, requireAdmin, async (req, res) => {
+// DELETE /api/users/:id — delete user (system admin only)
+router.delete("/:id", protect, requireRole("system_admin"), async (req, res) => {
   try {
+    const target = await User.findById(req.params.id).select("role");
+    if (!target) return res.status(404).json({ message: "User not found" });
+    if (target.role === "system_admin" && (await isOnlySystemAdmin(target._id))) {
+      return res.status(409).json({ message: "Cannot delete the only remaining System Admin account." });
+    }
+
     const deleted = await User.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: "User not found" });
 

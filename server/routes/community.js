@@ -5,11 +5,40 @@ import ResourceDonation from "../models/ResourceDonation.js";
 import ResourceMessage  from "../models/ResourceMessage.js";
 import Alert            from "../models/Alert.js";
 import User             from "../models/user.js";
-import { protect, requireAdminOrBarangay, optionalProtect } from "../middleware/auth.js";
+import { protect, requireRole, requireAssignedBarangayIfOfficial, optionalProtect } from "../middleware/auth.js";
+import { isOpsRole } from "../config/roles.js";
+import { barangayLabel } from "../config/barangays.js";
 import { sendAdminNotification, sendPushToUser } from "./push.js";
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// ResourceRequest/ResourceDonation.barangay is free text (could be the
+// normalized key "sanroque" or the display label "San Roque" depending on
+// how the request was submitted) — match either, case-insensitively, same
+// approach the /board handler already uses for its barangay query filter.
+function barangayMatch(assignedBarangay) {
+  const label = barangayLabel(assignedBarangay);
+  return new RegExp(`^(${escapeRegex(assignedBarangay)}|${escapeRegex(label)})$`, "i");
+}
+
+// Mongo filter: {} for cdrrmo (city-wide), {barangay: <regex>} for barangay_official.
+function communityBarangayFilter(req) {
+  return req.user.role === "barangay_official"
+    ? { barangay: barangayMatch(req.user.assignedBarangay) }
+    : {};
+}
+
+// Write-path guard mirroring rejectIfOutsideAssignedBarangay, but using the
+// same free-text-tolerant match as communityBarangayFilter.
+function rejectIfCommunityOutsideAssignedBarangay(req, res, resourceBarangay) {
+  if (req.user.role !== "barangay_official") return false;
+  if (!barangayMatch(req.user.assignedBarangay).test(resourceBarangay ?? "")) {
+    res.status(403).json({ success: false, error: "Outside your assigned barangay" });
+    return true;
+  }
+  return false;
 }
 
 function anonymizeName(fullName) {
@@ -20,7 +49,7 @@ function anonymizeName(fullName) {
 }
 
 function isParticipant(request, userId, role) {
-  if (["admin", "barangay_official"].includes(role)) return true;
+  if (isOpsRole(role)) return true;
   if (request.userId?.toString() === userId) return true;
   if (request.matchedPledgerId?.toString() === userId) return true;
   return false;
@@ -111,11 +140,11 @@ router.get("/board", optionalProtect, async (req, res) => {
 
 // ─── Requests ─────────────────────────────────────────────────────────────────
 
-// GET /api/community/requests — admin/barangay view with priority scoring (5.4)
-router.get("/requests", protect, requireAdminOrBarangay, async (req, res) => {
+// GET /api/community/requests — CDRRMO/Barangay Official view with priority scoring (5.4)
+router.get("/requests", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     const [requests, activeAlerts] = await Promise.all([
-      ResourceRequest.find().sort({ createdAt: 1 }).lean(),
+      ResourceRequest.find(communityBarangayFilter(req)).sort({ createdAt: 1 }).lean(),
       Alert.find({ isActive: true }).select("barangays severity").lean(),
     ]);
 
@@ -459,7 +488,7 @@ router.patch("/requests/:id/release", protect, async (req, res) => {
     if (!existing) return res.status(404).json({ success: false, error: "Request not found." });
 
     const isOwner = existing.userId?.toString() === req.user.id;
-    const isAdmin = ["admin", "barangay_official"].includes(req.user.role);
+    const isAdmin = isOpsRole(req.user.role);
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ success: false, error: "Only the requester or CDRRMO can release this match." });
     }
@@ -554,7 +583,7 @@ router.patch("/requests/:id/confirm", protect, async (req, res) => {
     if (!request) return res.status(404).json({ success: false, error: "Request not found." });
 
     const isOwner = request.userId?.toString() === req.user.id;
-    const isAdmin = ["admin", "barangay_official"].includes(req.user.role);
+    const isAdmin = isOpsRole(req.user.role);
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ success: false, error: "Only the requester or admin can confirm receipt." });
     }
@@ -586,11 +615,12 @@ router.patch("/requests/:id/confirm", protect, async (req, res) => {
 });
 
 // PATCH /api/community/requests/:id/fulfill — admin force-fulfill (5.11)
-router.patch("/requests/:id/fulfill", protect, requireAdminOrBarangay, async (req, res) => {
+router.patch("/requests/:id/fulfill", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const { note } = req.body;
     const request = await ResourceRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ success: false, error: "Request not found." });
+    if (rejectIfCommunityOutsideAssignedBarangay(req, res, request.barangay)) return;
     if (!["open", "pending", "approved", "matched"].includes(request.status)) {
       return res.status(400).json({ success: false, error: "Cannot force-fulfill a request in its current state." });
     }
@@ -616,7 +646,7 @@ router.patch("/requests/:id/cancel", protect, async (req, res) => {
     if (!request) return res.status(404).json({ success: false, error: "Request not found." });
 
     const isOwner = request.userId?.toString() === req.user.id;
-    const isAdmin = ["admin", "barangay_official"].includes(req.user.role);
+    const isAdmin = isOpsRole(req.user.role);
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ success: false, error: "You do not have permission to cancel this request." });
     }
@@ -671,7 +701,7 @@ router.post("/requests/:id/messages", protect, async (req, res) => {
       return res.status(400).json({ success: false, error: "Messages can only be sent on matched requests." });
     }
 
-    const senderRole = ["admin", "barangay_official"].includes(req.user.role) ? req.user.role : "resident";
+    const senderRole = isOpsRole(req.user.role) ? req.user.role : "resident";
     const message = await ResourceMessage.create({
       requestId: req.params.id,
       senderId:   req.user.id,
@@ -687,7 +717,7 @@ router.post("/requests/:id/messages", protect, async (req, res) => {
     const truncated = text.length > 60 ? text.slice(0, 57) + "..." : text;
     const isRequester  = request.userId?.toString() === req.user.id;
     const isPledger    = request.matchedPledgerId?.toString() === req.user.id;
-    const isAdminSend  = ["admin", "barangay_official"].includes(req.user.role);
+    const isAdminSend  = isOpsRole(req.user.role);
 
     if (isAdminSend) {
       if (request.userId) {
@@ -753,7 +783,7 @@ router.post("/donations", optionalProtect, async (req, res) => {
       isOfficial,
     } = req.body;
 
-    if (isOfficial && (!req.user || !["admin", "barangay_official"].includes(req.user.role))) {
+    if (isOfficial && (!req.user || !isOpsRole(req.user.role))) {
       return res.status(403).json({ success: false, error: "Only CDRRMO staff can post official supply offers." });
     }
 
@@ -813,12 +843,13 @@ router.post("/donations", optionalProtect, async (req, res) => {
 });
 
 // PATCH /api/community/donations/:id/schedule (5.17 — matchedRequestId field added)
-router.patch("/donations/:id/schedule", protect, requireAdminOrBarangay, async (req, res) => {
+router.patch("/donations/:id/schedule", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const { scheduledWindow, note, matchedRequestId } = req.body;
 
     const donation = await ResourceDonation.findById(req.params.id);
     if (!donation) return res.status(404).json({ success: false, error: "Donation not found." });
+    if (rejectIfCommunityOutsideAssignedBarangay(req, res, donation.barangay)) return;
     if (donation.status !== "offered") return res.status(400).json({ success: false, error: "Only offered donations can be scheduled." });
 
     if (matchedRequestId) {
@@ -851,11 +882,12 @@ router.patch("/donations/:id/schedule", protect, requireAdminOrBarangay, async (
 });
 
 // PATCH /api/community/donations/:id/receive (5.18 — unchanged)
-router.patch("/donations/:id/receive", protect, requireAdminOrBarangay, async (req, res) => {
+router.patch("/donations/:id/receive", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const { note } = req.body;
     const donation = await ResourceDonation.findById(req.params.id);
     if (!donation) return res.status(404).json({ success: false, error: "Donation not found." });
+    if (rejectIfCommunityOutsideAssignedBarangay(req, res, donation.barangay)) return;
     if (donation.status !== "scheduled") return res.status(400).json({ success: false, error: "Only scheduled donations can be marked received." });
 
     donation.status = "received";
@@ -871,12 +903,19 @@ router.patch("/donations/:id/receive", protect, requireAdminOrBarangay, async (r
   }
 });
 
-// PATCH /api/community/donations/:id/cancel (5.19 — unchanged)
+// PATCH /api/community/donations/:id/cancel — donor or CDRRMO/Barangay Official only
 router.patch("/donations/:id/cancel", protect, async (req, res) => {
   try {
     const { note } = req.body;
     const donation = await ResourceDonation.findById(req.params.id);
     if (!donation) return res.status(404).json({ success: false, error: "Donation not found." });
+
+    const isOwner = donation.userId?.toString() === req.user.id;
+    const isAdmin = isOpsRole(req.user.role);
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, error: "You do not have permission to cancel this donation." });
+    }
+    if (rejectIfCommunityOutsideAssignedBarangay(req, res, donation.barangay)) return;
     if (["received", "cancelled"].includes(donation.status)) {
       return res.status(400).json({ success: false, error: "Cannot cancel a donation that is already received or cancelled." });
     }
@@ -889,6 +928,35 @@ router.patch("/donations/:id/cancel", protect, async (req, res) => {
     if (io) io.emit("community_donation_updated", { id: donation._id, status: donation.status });
 
     res.json({ success: true, donation });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Chat Monitoring (CDRRMO oversight of ResourceMessage threads) ────────────
+
+// GET /api/community/messages — city-wide, paginated list of chat threads
+// across all resource requests, for CDRRMO oversight. Not barangay-scoped:
+// CDRRMO monitoring is city-wide by design.
+router.get("/messages", protect, requireRole("cdrrmo"), async (req, res) => {
+  try {
+    const { limit = 50, before } = req.query;
+    const query = before ? { createdAt: { $lt: new Date(before) } } : {};
+    const messages = await ResourceMessage.find(query)
+      .sort({ createdAt: -1 })
+      .limit(Math.min(parseInt(limit, 10) || 50, 200))
+      .lean();
+
+    const requestIds = [...new Set(messages.map((m) => m.requestId.toString()))];
+    const requests = await ResourceRequest.find({ _id: { $in: requestIds } })
+      .select("itemDescription barangay requesterName status")
+      .lean();
+    const requestById = Object.fromEntries(requests.map((r) => [r._id.toString(), r]));
+
+    res.json({
+      success: true,
+      messages: messages.map((m) => ({ ...m, request: requestById[m.requestId.toString()] ?? null })),
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

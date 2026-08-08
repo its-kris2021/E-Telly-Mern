@@ -8,6 +8,7 @@ import FilterTabs from "../components/alerts/FilterTabs";
 import CreateAlertModal from "../components/alerts/CreateAlertModal";
 import DismissConfirmModal from "../components/alerts/DismissConfirmModal";
 import ModelPerformancePanel from "../components/admin/ModelPerformancePanel";
+import { getUserRole } from "../config/roleModules";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -30,8 +31,10 @@ export default function AlertsPage() {
 
   const { pendingCount, syncing, enqueue, flush } = useOfflineAlertQueue(refresh);
 
-  const stored = localStorage.getItem("user");
-  const isAdmin = stored ? JSON.parse(stored).role === "admin" : false;
+  // Previously role === "admin" (the pre-split ops-admin role); "admin"'s
+  // full-ops privileges now live on "cdrrmo" — barangay_official still
+  // doesn't see these CDRRMO-only panels.
+  const isAdmin = getUserRole() === "cdrrmo";
 
   const [showModal,      setShowModal]      = useState(false);
   const [activeFilter,   setActiveFilter]   = useState("all");

@@ -6,20 +6,30 @@ import InstallPrompt from "./components/pwa/InstallPrompt";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
-import DashboardPage from "./pages/DashboardPage";
 import AlertsPage from "./pages/AlertsPage";
 import HazardMapPage from "./pages/HazardMapPage";
 import EvacuationPage from "./pages/EvacuationPage";
-import CommunitySharingPage from "./pages/CommunitySharingPage";
-import SafetyTipsPage from "./pages/SafetyTipsPage";
-import SafetyTipDetailPage from "./pages/SafetyTipDetailPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 import ReportsPage from "./pages/ReportPage";
-import { getUserRole, getHomePath } from "./config/roleModules";
+import SystemSettingsPage from "./pages/SystemSettingsPage";
+import FamilyMembersPage from "./pages/FamilyMembersPage";
+import SafetyTipsPage from "./pages/SafetyTipsPage";
+import SafetyTipDetailPage from "./pages/SafetyTipDetailPage";
+import { getUserRole, getHomePath, ROLE_HOME, ROLE_NAV_ITEMS } from "./config/roleModules";
+
+function clearSession() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+}
 
 // ── Token validation ───────────────────────────────────────────────────────────
-// Checks both presence AND expiry of the JWT so stale dev-session tokens
-// don't permanently bypass the login page.
+// Checks presence AND expiry of the JWT, AND that the cached role still maps
+// to a known home page. That last check matters whenever the role model
+// changes (e.g. a role gets renamed/split): a browser with a still-valid but
+// now-unrecognized cached role would otherwise get treated as "logged in"
+// with nowhere to go, which sends PublicRoute into a /login → /login redirect
+// loop. Clearing the stale session here makes every guard just fall through
+// to the login page instead.
 function isTokenValid() {
   const token = localStorage.getItem("token");
   if (!token) return false;
@@ -28,18 +38,23 @@ function isTokenValid() {
     const payload = JSON.parse(atob(token.split(".")[1]));
     // exp is in seconds; Date.now() is in milliseconds
     if (payload.exp && payload.exp * 1000 < Date.now()) {
-      // Token is expired — clean up so we don't keep checking
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      clearSession();
       return false;
     }
-    return true;
   } catch {
-    // Token is malformed; treat as invalid
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearSession();
     return false;
   }
+
+  const role = getUserRole();
+  if (role && !(role in ROLE_HOME)) {
+    // Stale/unrecognized role (e.g. cached before a role rename) — treat as
+    // logged out rather than looping trying to find a home for it.
+    clearSession();
+    return false;
+  }
+
+  return true;
 }
 
 // ── Route guards ──────────────────────────────────────────────────────────────
@@ -133,8 +148,14 @@ function ProtectedLayout({ Page, roles }) {
   );
 }
 
-// Roles that use the disaster-response portal (Dashboard, Alerts, Reports, etc.)
-const OPS_ROLES = ["admin", "barangay_official"];
+// Roles allowed on a given path, derived from the single source of truth
+// (roleModules.js ROLE_NAV_ITEMS) instead of a second hand-maintained list —
+// keeps route access and sidebar nav visibility from drifting apart.
+function rolesFor(path) {
+  return Object.keys(ROLE_NAV_ITEMS).filter((role) =>
+    ROLE_NAV_ITEMS[role].some((item) => item.href === path),
+  );
+}
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -170,43 +191,45 @@ export default function App() {
           element={<AuthOnlyRoute Page={ChangePasswordPage} />}
         />
 
-        {/* Protected pages — disaster-response ops (Admin + Barangay Official) */}
-        <Route
-          path="/dashboard"
-          element={<ProtectedLayout Page={DashboardPage} roles={OPS_ROLES} />}
-        />
+        {/* Protected pages — disaster-response ops (CDRRMO + Barangay Official) */}
         <Route
           path="/alerts"
-          element={<ProtectedLayout Page={AlertsPage} roles={OPS_ROLES} />}
+          element={<ProtectedLayout Page={AlertsPage} roles={rolesFor("/alerts")} />}
         />
         <Route
           path="/reports"
-          element={<ProtectedLayout Page={ReportsPage} roles={OPS_ROLES} />}
+          element={<ProtectedLayout Page={ReportsPage} roles={rolesFor("/reports")} />}
         />
         <Route
           path="/hazard-map"
-          element={<ProtectedLayout Page={HazardMapPage} roles={OPS_ROLES} />}
+          element={<ProtectedLayout Page={HazardMapPage} roles={rolesFor("/hazard-map")} />}
         />
         <Route
           path="/evacuation"
-          element={<ProtectedLayout Page={EvacuationPage} roles={OPS_ROLES} />}
+          element={<ProtectedLayout Page={EvacuationPage} roles={rolesFor("/evacuation")} />}
         />
         <Route
-          path="/community-sharing"
-          element={<ProtectedLayout Page={CommunitySharingPage} roles={OPS_ROLES} />}
+          path="/family-members"
+          element={<ProtectedLayout Page={FamilyMembersPage} roles={rolesFor("/family-members")} />}
         />
         <Route
           path="/safety-tips"
-          element={<ProtectedLayout Page={SafetyTipsPage} roles={OPS_ROLES} />}
+          element={<ProtectedLayout Page={SafetyTipsPage} roles={rolesFor("/safety-tips")} />}
         />
+        {/* Detail page has no nav entry of its own — inherits the list page's roles */}
         <Route
           path="/safety-tips/:slug"
-          element={<ProtectedLayout Page={SafetyTipDetailPage} roles={OPS_ROLES} />}
+          element={<ProtectedLayout Page={SafetyTipDetailPage} roles={rolesFor("/safety-tips")} />}
         />
 
+        {/* Protected pages — System Admin (web-platform/account management, zero ops access) */}
         <Route
           path="/manage-users"
-          element={<ProtectedLayout Page={ManageUsersPage} roles={["admin"]} />}
+          element={<ProtectedLayout Page={ManageUsersPage} roles={rolesFor("/manage-users")} />}
+        />
+        <Route
+          path="/system-settings"
+          element={<ProtectedLayout Page={SystemSettingsPage} roles={rolesFor("/system-settings")} />}
         />
 
         {/* Catch-all */}

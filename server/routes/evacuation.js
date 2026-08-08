@@ -2,7 +2,7 @@ import express from "express";
 import EvacuationCenter from "../models/EvacuationCenter.js";
 import EvacuationLog from "../models/EvacuationLog.js";
 import User from "../models/user.js";
-import { protect, requireAdmin } from "../middleware/auth.js";
+import { protect, requireRole, rejectIfOutsideAssignedBarangay } from "../middleware/auth.js";
 import { BARANGAY_COORDS } from "../config/barangays.js";
 
 const router = express.Router();
@@ -692,11 +692,12 @@ router.get("/centers", protect, async (req, res) => {
 });
 
 // ── PUT /api/evacuation/centers/:id/occupancy ────────────────────────────────
-router.put("/centers/:id/occupancy", protect, async (req, res) => {
+router.put("/centers/:id/occupancy", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const center = await EvacuationCenter.findById(req.params.id);
     if (!center) return res.status(404).json({ message: "Center not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, center.barangay)) return;
 
     const prev = center.occupancy;
     const next = Math.max(
@@ -730,11 +731,12 @@ router.put("/centers/:id/occupancy", protect, async (req, res) => {
 });
 
 // ── PUT /api/evacuation/centers/:id/capacity ─────────────────────────────────
-router.put("/centers/:id/capacity", protect, async (req, res) => {
+router.put("/centers/:id/capacity", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const center = await EvacuationCenter.findById(req.params.id);
     if (!center) return res.status(404).json({ message: "Center not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, center.barangay)) return;
 
     const prev = center.capacity;
     const next = Math.max(1, parseInt(req.body.capacity, 10));
@@ -766,11 +768,12 @@ router.put("/centers/:id/capacity", protect, async (req, res) => {
 });
 
 // ── POST /api/evacuation/centers/:id/reset ───────────────────────────────────
-router.post("/centers/:id/reset", protect, async (req, res) => {
+router.post("/centers/:id/reset", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const center = await EvacuationCenter.findById(req.params.id);
     if (!center) return res.status(404).json({ message: "Center not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, center.barangay)) return;
 
     const prev = center.occupancy;
     center.occupancy = 0;
@@ -800,7 +803,7 @@ router.post("/centers/:id/reset", protect, async (req, res) => {
 router.put(
   "/centers/:id/availability",
   protect,
-  requireAdmin,
+  requireRole("cdrrmo"),
   async (req, res) => {
     try {
       const userName = await resolveUserName(req);
@@ -834,8 +837,8 @@ router.put(
   },
 );
 
-// ── POST /api/evacuation/centers (admin) ─────────────────────────────────────
-router.post("/centers", protect, requireAdmin, async (req, res) => {
+// ── POST /api/evacuation/centers (CDRRMO — full center management) ───────────
+router.post("/centers", protect, requireRole("cdrrmo"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const { name, location, barangay, capacity, lat, lng } = req.body;

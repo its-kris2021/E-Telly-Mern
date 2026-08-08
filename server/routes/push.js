@@ -4,6 +4,7 @@ import PushSubscription from "../models/PushSubscription.js";
 import FcmToken from "../models/FcmToken.js";
 import User from "../models/user.js";
 import { protect } from "../middleware/auth.js";
+import { OPS_ROLES } from "../config/roles.js";
 import { sendFCMToAll, sendFCMToUser } from "../services/fcm.js";
 
 const router = express.Router();
@@ -135,13 +136,14 @@ export async function sendPushToUser(userId, payload) {
   ]);
 }
 
-// Admin-only sender — VAPID only, no FCM.
-// Sends exclusively to admin and barangay_official subscribers so residents
-// are not spammed with operational CDRRMO tasks.
+// Ops-only sender — VAPID only, no FCM.
+// Sends exclusively to CDRRMO/barangay_official subscribers so residents
+// (and System Admin, which has no disaster-ops role) are not spammed with
+// operational CDRRMO tasks.
 export async function sendAdminNotification(payload) {
   initVapid();
   const adminUsers = await User.find({
-    role: { $in: ["admin", "barangay_official"] },
+    role: { $in: OPS_ROLES },
   }).select("_id").lean();
   const adminIds = adminUsers.map((u) => u._id);
   const subs = await PushSubscription.find({ userId: { $in: adminIds } });

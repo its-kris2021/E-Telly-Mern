@@ -17,6 +17,7 @@ import ModalShell from "../components/ui/ModalShell";
 import { connectSocket } from "../utils/socket";
 import buildingImg from "../images/building.png";
 import LocationPicker from "../components/alerts/LocationPicker/LocationPicker";
+import { getUserRole } from "../config/roleModules";
 
 // ── Facility image map ────────────────────────────────────────────────────────
 const FACILITY_IMAGES = {
@@ -711,8 +712,10 @@ export default function EvacuationPage() {
     BARANGAYS.find((b) => b.value === barangay)?.label ?? barangay;
   const hotlines = BARANGAYS.find((b) => b.value === barangay)?.hotlines ?? [];
 
-  const stored = localStorage.getItem("user");
-  const isAdmin = stored ? JSON.parse(stored).role === "admin" : false;
+  // Full center management (create/availability, activity log) is CDRRMO-only;
+  // Barangay Official keeps occupancy/capacity updates (rendered unconditionally
+  // below) but not these controls.
+  const isAdmin = getUserRole() === "cdrrmo";
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

@@ -1,26 +1,28 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Pencil, Trash2, UserCog, Copy, KeyRound, ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
 import ModalShell from "../components/ui/ModalShell";
+import { ROLE_LABELS } from "../config/roleModules";
+import { BARANGAY_OPTIONS, barangayLabel } from "../config/barangays";
 
 const API_BASE  = import.meta.env.PROD
   ? window.location.origin
   : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 const PAGE_SIZE = 7;
 
+// Residents are never created/managed here — self-registration is mobile-only.
 const ROLE_OPTIONS = [
-  { key: "admin",             label: "Admin"    },
-  { key: "barangay_official", label: "Barangay" },
-  { key: "user",              label: "Resident" },
+  { key: "system_admin",      label: ROLE_LABELS.system_admin      },
+  { key: "cdrrmo",            label: ROLE_LABELS.cdrrmo            },
+  { key: "barangay_official", label: ROLE_LABELS.barangay_official },
 ];
 
 function getRoleLabel(role) {
-  if (role === "admin")             return "Admin";
-  if (role === "barangay_official") return "Barangay";
-  return "Resident";
+  return ROLE_LABELS[role] ?? "Resident";
 }
 
 function getRoleBadge(role) {
-  if (role === "admin")             return "bg-red-100 text-red-700";
+  if (role === "system_admin")      return "bg-purple-100 text-purple-700";
+  if (role === "cdrrmo")            return "bg-red-100 text-red-700";
   if (role === "barangay_official") return "bg-blue-100 text-blue-700";
   return "bg-green-100 text-green-700";
 }
@@ -49,7 +51,7 @@ export default function ManageUsersPage() {
   const filterRef = useRef(null);
 
   const [formData, setFormData] = useState({
-    email: "", firstName: "", lastName: "", role: "barangay_official", password: "",
+    email: "", firstName: "", lastName: "", role: "barangay_official", assignedBarangay: "", password: "",
   });
 
   useEffect(() => {
@@ -209,7 +211,7 @@ export default function ManageUsersPage() {
     setGeneratedPassword("");
     setShowPassword(false);
     setPasswordTouched(false);
-    setFormData({ email: "", firstName: "", lastName: "", role: "barangay_official", password: "" });
+    setFormData({ email: "", firstName: "", lastName: "", role: "barangay_official", assignedBarangay: "", password: "" });
     setIsModalOpen(true);
   };
 
@@ -220,7 +222,8 @@ export default function ManageUsersPage() {
     setShowPassword(false);
     setFormData({
       email: user.email, firstName: getFirstName(user.name),
-      lastName: getLastName(user.name), role: user.role, password: "",
+      lastName: getLastName(user.name), role: user.role,
+      assignedBarangay: user.assignedBarangay || "", password: "",
     });
     setIsModalOpen(true);
     setMenuState(null);
@@ -231,6 +234,10 @@ export default function ManageUsersPage() {
     e.preventDefault();
     if (!isPasswordValid(formData.password)) {
       setPasswordTouched(true);
+      return;
+    }
+    if (formData.role === "barangay_official" && !formData.assignedBarangay) {
+      showAlert("Select an assigned barangay for this Barangay Official.", "error");
       return;
     }
     setIsLoading(true);
@@ -256,6 +263,10 @@ export default function ManageUsersPage() {
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     if (!selectedUser) return;
+    if (formData.role === "barangay_official" && !formData.assignedBarangay) {
+      showAlert("Select an assigned barangay for this Barangay Official.", "error");
+      return;
+    }
     setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -449,6 +460,7 @@ export default function ManageUsersPage() {
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${getRoleBadge(user.role)}`}>
                     {getRoleLabel(user.role)}
+                    {user.role === "barangay_official" && user.assignedBarangay && ` — ${barangayLabel(user.assignedBarangay)}`}
                   </span>
                 </td>
                 <td className="px-6 py-4">
@@ -634,14 +646,33 @@ export default function ManageUsersPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                   <select
                     value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value, assignedBarangay: e.target.value === "barangay_official" ? formData.assignedBarangay : "" })}
                     className="text-sm w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 cursor-pointer"
                     disabled={isLoading}
                   >
-                    <option value="barangay_official">Barangay</option>
-                    <option value="admin">Admin</option>
+                    {ROLE_OPTIONS.map((opt) => (
+                      <option key={opt.key} value={opt.key}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
+
+                {formData.role === "barangay_official" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Barangay</label>
+                    <select
+                      value={formData.assignedBarangay}
+                      onChange={(e) => setFormData({ ...formData, assignedBarangay: e.target.value })}
+                      className="text-sm w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 cursor-pointer"
+                      disabled={isLoading}
+                      required
+                    >
+                      <option value="">Select a barangay…</option>
+                      {BARANGAY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {!isEditMode && (
                   <div>

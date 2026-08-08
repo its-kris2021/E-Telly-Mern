@@ -4,6 +4,7 @@ import {
   Droplets, Flame, Activity, Mountain, Heart, LifeBuoy, Siren, FileText,
 } from "lucide-react";
 import ModalShell from "../ui/ModalShell";
+import { getUserRole } from "../../config/roleModules";
 
 export default function ReportTile({
   id,
@@ -12,6 +13,7 @@ export default function ReportTile({
   rescue,
   description,
   location,
+  barangay,
   timestamp,
   reportedBy,
   hasImage,
@@ -37,7 +39,7 @@ export default function ReportTile({
 
   const stored = localStorage.getItem("user");
   const parsedUser = stored ? JSON.parse(stored) : null;
-  const isAdmin = parsedUser?.role === "admin";
+  const isAdmin = getUserRole() === "cdrrmo";
   const currentUserName = parsedUser?.name || parsedUser?.email || "admin";
 
   const getLocationString = () => {
@@ -170,6 +172,11 @@ export default function ReportTile({
 
             <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 flex-wrap">
               <span className="truncate">{locationString}</span>
+              {barangay && (
+                <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium shrink-0">
+                  Brgy. {barangay}
+                </span>
+              )}
               <span>{timestamp}</span>
               {rescue && (
                 <span className="flex items-center gap-1 text-red-600 font-medium">
@@ -243,7 +250,10 @@ export default function ReportTile({
 
               <div>
                 <p className="text-sm font-medium text-gray-700">Reported By</p>
-                <p className="text-gray-900 text-sm mt-1">{reportedBy}</p>
+                <p className="text-gray-900 text-sm mt-1">
+                  {reportedBy}
+                  {barangay && <span className="text-gray-500"> · Brgy. {barangay}</span>}
+                </p>
               </div>
 
               <div>

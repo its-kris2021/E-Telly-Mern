@@ -7,11 +7,11 @@
 import express from "express";
 import RiskModel from "../models/RiskModel.js";
 import Alert from "../models/Alert.js";
-import { protect, requireAdminOrBarangay } from "../middleware/auth.js";
+import { protect, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.get("/model-metrics", protect, requireAdminOrBarangay, async (req, res) => {
+router.get("/model-metrics", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const [floodVersions, landslideVersions] = await Promise.all([
       RiskModel.find({ hazardType: "flood" }).sort({ version: -1 }).limit(20).lean(),

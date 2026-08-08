@@ -2,10 +2,23 @@
 import express from "express";
 import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
-import { protect } from "../middleware/auth.js";
+import { protect, requireRole } from "../middleware/auth.js";
 import { sendNotificationToAll } from "./push.js";
 
 const router = express.Router();
+
+// Alert.barangays is a multi-barangay array (unlike the single-key
+// resourceBarangayKey shape rejectIfOutsideAssignedBarangay expects), so a
+// barangay_official is allowed to act on an alert only if their assigned
+// barangay is one of the alert's barangays.
+function rejectIfAlertOutsideAssignedBarangay(req, res, alert) {
+  if (req.user.role !== "barangay_official") return false;
+  if (!alert?.barangays?.includes(req.user.assignedBarangay)) {
+    res.status(403).json({ error: "Outside your assigned barangay" });
+    return true;
+  }
+  return false;
+}
 
 // GET /api/alerts — fetch all active alerts, sorted by severity then time
 router.get("/", async (req, res) => {
@@ -52,7 +65,7 @@ router.get("/log", async (req, res) => {
 });
 
 // POST /api/alerts — create a manual alert (also auto-creates a linked report)
-router.post("/", protect, async (req, res) => {
+router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const { source, type, severity, title, description, location, barangays, lat, lng } = req.body;
 
@@ -60,8 +73,12 @@ router.post("/", protect, async (req, res) => {
       return res.status(400).json({ error: "title, description, and severity are required" });
     }
 
-    const isManual = ["admin", "barangay_official"].includes(req.user.role);
+    const isManual = true; // guaranteed by requireRole above
     const effectiveSeverity = type === "rescue" ? "evacuate" : severity;
+    // Barangay officials can only ever raise alerts scoped to their own
+    // barangay — ignore/override any client-supplied barangays array.
+    const effectiveBarangays =
+      req.user.role === "barangay_official" ? [req.user.assignedBarangay] : (barangays ?? []);
 
     const alert = await Alert.create({
       source:   source ?? "CDRRMO",
@@ -70,7 +87,7 @@ router.post("/", protect, async (req, res) => {
       title,
       description,
       location: location ?? "Antipolo City, Rizal",
-      barangays: barangays ?? [],
+      barangays: effectiveBarangays,
       lat:      lat ?? null,
       lng:      lng ?? null,
       isManual,
@@ -139,8 +156,12 @@ router.post("/", protect, async (req, res) => {
 });
 
 // PATCH /api/alerts/:id/dismiss — soft-delete an alert + resolve its linked report
-router.patch("/:id/dismiss", protect, async (req, res) => {
+router.patch("/:id/dismiss", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
+    const existing = await Alert.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Alert not found" });
+    if (rejectIfAlertOutsideAssignedBarangay(req, res, existing)) return;
+
     const actorName = req.user.name ?? req.user.email ?? "admin";
     const alert = await Alert.findByIdAndUpdate(
       req.params.id,
@@ -191,8 +212,12 @@ router.patch("/:id/dismiss", protect, async (req, res) => {
 });
 
 // PATCH /api/alerts/:id/resolve — mark alert resolved + resolve linked report
-router.patch("/:id/resolve", protect, async (req, res) => {
+router.patch("/:id/resolve", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
+    const existing = await Alert.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Alert not found" });
+    if (rejectIfAlertOutsideAssignedBarangay(req, res, existing)) return;
+
     const actorName = req.user.name ?? req.user.email ?? "admin";
     const alert = await Alert.findByIdAndUpdate(
       req.params.id,
@@ -245,8 +270,12 @@ router.patch("/:id/resolve", protect, async (req, res) => {
 // PATCH /api/alerts/:id/confirm — admin confirms an AI-predicted hazard actually
 // occurred. Scoped to source:"ai" alerts only — this is the feedback signal
 // scripts/trainRiskModel.js reads back as fieldMetrics on the next retrain.
-router.patch("/:id/confirm", protect, async (req, res) => {
+router.patch("/:id/confirm", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
+    const existing = await Alert.findOne({ _id: req.params.id, source: "ai" });
+    if (!existing) return res.status(404).json({ error: "AI alert not found" });
+    if (rejectIfAlertOutsideAssignedBarangay(req, res, existing)) return;
+
     const actorName = req.user.name ?? req.user.email ?? "admin";
     const alert = await Alert.findOneAndUpdate(
       { _id: req.params.id, source: "ai" },
@@ -270,8 +299,12 @@ router.patch("/:id/confirm", protect, async (req, res) => {
 });
 
 // PATCH /api/alerts/:id/reject — admin marks an AI-predicted hazard a false positive.
-router.patch("/:id/reject", protect, async (req, res) => {
+router.patch("/:id/reject", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
+    const existing = await Alert.findOne({ _id: req.params.id, source: "ai" });
+    if (!existing) return res.status(404).json({ error: "AI alert not found" });
+    if (rejectIfAlertOutsideAssignedBarangay(req, res, existing)) return;
+
     const actorName = req.user.name ?? req.user.email ?? "admin";
     const alert = await Alert.findOneAndUpdate(
       { _id: req.params.id, source: "ai" },
@@ -294,9 +327,13 @@ router.patch("/:id/reject", protect, async (req, res) => {
   }
 });
 
-// PATCH /api/alerts/:id/reactivate — restore a dismissed alert (admin only)
-router.patch("/:id/reactivate", protect, async (req, res) => {
+// PATCH /api/alerts/:id/reactivate — restore a dismissed alert (CDRRMO / assigned Barangay Official)
+router.patch("/:id/reactivate", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
   try {
+    const existing = await Alert.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Alert not found" });
+    if (rejectIfAlertOutsideAssignedBarangay(req, res, existing)) return;
+
     const actorName = req.user.name ?? req.user.email ?? "admin";
     const alert = await Alert.findByIdAndUpdate(
       req.params.id,

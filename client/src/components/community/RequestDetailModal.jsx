@@ -4,6 +4,8 @@ import ModalShell from "../ui/ModalShell";
 import { API_BASE, authHeaders, formatDate, getStatusColor, getStatusDotColor } from "./helpers";
 import LogModal from "./LogModal";
 import { connectSocket } from "../../utils/socket";
+import { getUserRole } from "../../config/roleModules";
+import { isOpsRole } from "../../config/roles";
 
 const PLEDGE_BADGE = {
   pending:  "bg-gray-100 text-gray-600",
@@ -27,10 +29,7 @@ export default function RequestDetailModal({ req, onClose, onRefresh }) {
   const [msgError,    setMsgError]    = useState("");
   const msgEndRef = useRef(null);
 
-  const stored = localStorage.getItem("user");
-  const isAdmin = stored
-    ? ["admin", "barangay_official"].includes(JSON.parse(stored).role)
-    : false;
+  const isAdmin = isOpsRole(getUserRole());
 
   const isTerminal = ["fulfilled", "cancelled"].includes(req.status);
   const canAct = !isTerminal && isAdmin;

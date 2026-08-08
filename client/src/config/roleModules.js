@@ -2,47 +2,51 @@
 //
 // Only routes/pages that exist today are listed here.
 import {
-  LayoutDashboard,
   Bell,
   Volume2,
   Map,
   MapPin,
   Users,
-  InfoIcon,
-  HandHelpingIcon,
+  UserRound,
+  Settings,
+  BookOpen,
 } from "lucide-react";
 
 export const ROLE_LABELS = {
-  admin: "Admin",
+  system_admin: "System Admin",
+  cdrrmo: "CDRRMO",
   barangay_official: "Barangay Official",
-  user: "User",
+  user: "Resident",
 };
 
 // Where each role lands after login / when hitting an unauthorized route.
 export const ROLE_HOME = {
-  admin: "/dashboard",
-  barangay_official: "/dashboard",
+  system_admin: "/manage-users",
+  cdrrmo: "/alerts",
+  barangay_official: "/reports",
 };
 
 export const ROLE_NAV_ITEMS = {
-  admin: [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-    { icon: Bell, label: "Alerts", href: "/alerts" },
-    { icon: Volume2, label: "Reports", href: "/reports" },
-    { icon: Map, label: "Hazard Map", href: "/hazard-map" },
-    { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
-    { icon: HandHelpingIcon, label: "Community Sharing", href: "/community-sharing" },
-    { icon: InfoIcon, label: "Safety Tips", href: "/safety-tips" },
+  // System Admin is web-platform/account-management only — zero disaster-ops access.
+  system_admin: [
     { icon: Users, label: "Manage Users", href: "/manage-users" },
+    { icon: Settings, label: "System Settings", href: "/system-settings" },
   ],
-  barangay_official: [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+  // CDRRMO — full city-wide disaster-ops access (all barangays).
+  cdrrmo: [
     { icon: Bell, label: "Alerts", href: "/alerts" },
     { icon: Volume2, label: "Reports", href: "/reports" },
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
-    { icon: HandHelpingIcon, label: "Community Sharing", href: "/community-sharing" },
-    { icon: InfoIcon, label: "Safety Tips", href: "/safety-tips" },
+  ],
+  // Barangay Official — scoped to their assigned barangay only (enforced server-side).
+  barangay_official: [
+    { icon: Volume2, label: "Reports", href: "/reports" },
+    { icon: Map, label: "Hazard Map", href: "/hazard-map" },
+    { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
+    { icon: Bell, label: "Alerts", href: "/alerts" },
+    { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
+    { icon: UserRound, label: "Family Members", href: "/family-members" },
   ],
 };
 
