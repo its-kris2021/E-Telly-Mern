@@ -100,6 +100,12 @@ export function resolveBarangayKey(input) {
     .toLowerCase()
     .replace(/^brgy\.?\s*/, "")
     .replace(/^barangay\s*/, "")
+    // Common Philippine address abbreviations ("Sta. Cruz" -> "Santa Cruz",
+    // "Sto. Nino" -> "Santo Nino") — expand before stripping punctuation,
+    // since the period is the cue that distinguishes them from "st"/"sto"
+    // appearing inside an unrelated word.
+    .replace(/\bsta\.?\b/g, "santa")
+    .replace(/\bsto\.?\b/g, "santo")
     .replace(/[^a-z0-9]/g, "");
   if (BARANGAY_COORDS[normalized]) return normalized;
 

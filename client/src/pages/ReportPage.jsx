@@ -2,6 +2,7 @@ import ReportTile from "../components/admin/ReportTile";
 import { useState, useEffect, useRef } from "react";
 import { connectSocket } from "../utils/socket";
 import { TrendingUp, Search, Download, Siren } from "lucide-react";
+import { barangayLabel } from "../config/barangays";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -109,6 +110,10 @@ export default function ReportsPage() {
               report.location?.exactAddress ||
               report.location ||
               "Unknown location",
+            // Reporter's registered profile barangay — not the GPS/incident
+            // location above. Null when the report isn't linked to a
+            // registered resident (e.g. anonymous submission).
+            barangay: report.reporterBarangayKey ? barangayLabel(report.reporterBarangayKey) : null,
             timestamp: report.timestamp ? new Date(report.timestamp).toLocaleString() : "",
             rawTimestamp: report.timestamp,
             reportedBy:

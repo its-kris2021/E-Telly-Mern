@@ -144,18 +144,48 @@ router.post("/create", async (req, res) => {
     const {
       emergencyType, severity, description, location,
       latitude, longitude, userName, phoneNumber, images, barangay,
-      source, offlineSubmittedAt, reportId,
+      source, offlineSubmittedAt, reportId, userData,
     } = req.body;
 
     if (!emergencyType || !severity) {
       return res.status(400).json({ success: false, error: "Missing required fields: emergencyType, severity" });
     }
 
+    // Incident location, for the map only — GPS/free-text, never used to
+    // decide who gets to see the report.
+    const freeTextBarangay = barangay || location?.barangay || "";
+    const lat = typeof latitude === "number" ? latitude : location?.coordinates?.latitude;
+    const lng = typeof longitude === "number" ? longitude : location?.coordinates?.longitude;
+    const barangayKey = resolveBarangayKey(freeTextBarangay) ?? nearestBarangayKey(lat, lng);
+
+    // Reporter's registered profile barangay — the source of truth for
+    // barangay_official routing/visibility (see scopeToAssignedBarangay in
+    // middleware/auth.js). The mobile app writes a structured `barangay`
+    // field (e.g. "Bagong Nayon") directly to the users collection outside
+    // this schema's declared paths, which is the reliable source; free-text
+    // `address` is only a fallback for accounts that predate it.
+    // A report from an unregistered/unmatched reporter gets reporterBarangayKey:
+    // null and simply won't surface for any barangay_official — only CDRRMO
+    // (unscoped) still sees it.
+    const reporterEmail = (userData?.email || "").trim().toLowerCase();
+    const reporter = reporterEmail
+      ? await mongoose.connection.db.collection("users").findOne(
+          { email: reporterEmail },
+          { projection: { barangay: 1, address: 1 } },
+        )
+      : null;
+    const reporterBarangayKey = reporter
+      ? resolveBarangayKey(reporter.barangay) ?? resolveBarangayKey(reporter.address)
+      : null;
+
     const reportData = {
       emergencyType, severity, description, location,
       latitude, longitude, userName, phoneNumber,
       images: Array.isArray(images) ? images.filter((s) => typeof s === "string" && s.startsWith("http")) : [],
       barangay: barangay || "",
+      barangayKey: barangayKey || null,
+      reporterEmail: reporterEmail || null,
+      reporterBarangayKey,
       timestamp: new Date(),
       status: "pending",
       source: source || "online",

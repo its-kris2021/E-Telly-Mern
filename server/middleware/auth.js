@@ -14,16 +14,43 @@ export const protect = (req, res, next) => {
   }
 };
 
-export const requireAdmin = (req, res, next) => {
-  if (req.user.role !== "admin")
-    return res.status(403).json({ message: "Admin access required" });
+// Generic role gate. Usage: requireRole("system_admin") or requireRole("cdrrmo", "barangay_official").
+export const requireRole = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user.role))
+    return res.status(403).json({ message: "Insufficient permissions" });
   next();
 };
 
-export const requireAdminOrBarangay = (req, res, next) => {
-  if (!["admin", "barangay_official"].includes(req.user.role))
-    return res.status(403).json({ message: "Insufficient permissions" });
+// Blocks a barangay_official whose account has no assignedBarangay from
+// touching any barangay-scoped resource. Other roles pass through untouched.
+export const requireAssignedBarangayIfOfficial = (req, res, next) => {
+  if (req.user.role === "barangay_official" && !req.user.assignedBarangay)
+    return res.status(403).json({ message: "No barangay assigned to this account" });
   next();
+};
+
+// Mongo filter scoping a barangay-keyed collection/model query to the
+// caller's turf: {} (unscoped) for cdrrmo/system_admin, {[keyField]: their
+// barangay} for barangay_official. keyField defaults to "barangayKey" —
+// pass "reporterBarangayKey" for emergency_reports (the reporter's
+// *registered profile* barangay, not the GPS-derived incident location —
+// see routes/reports.js) or "barangay" for EvacuationCenter/community models.
+export const scopeToAssignedBarangay = (req, keyField = "barangayKey") =>
+  req.user.role === "barangay_official"
+    ? { [keyField]: req.user.assignedBarangay }
+    : {};
+
+// Write-path guard: 403s and returns true if a barangay_official is acting
+// on a resource outside their assignedBarangay. No-op (returns false) for
+// every other role. Caller is responsible for sending the response and
+// returning immediately when this returns true.
+export const rejectIfOutsideAssignedBarangay = (req, res, resourceBarangayKey) => {
+  if (req.user.role !== "barangay_official") return false;
+  if (resourceBarangayKey !== req.user.assignedBarangay) {
+    res.status(403).json({ success: false, message: "Outside your assigned barangay" });
+    return true;
+  }
+  return false;
 };
 
 // Soft auth — sets req.user if a valid Bearer token is present, otherwise req.user = null.

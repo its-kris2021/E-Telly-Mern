@@ -17,10 +17,11 @@ import pushRoutes, { sendNotificationToAll, sendAdminNotification } from "./rout
 import syncRoutes from "./routes/sync.js";
 import uploadImagesRoutes from "./routes/uploadImages.js";
 import adminMetricsRoutes from "./routes/adminMetrics.js";
+import familyRoutes from "./routes/family.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import Alert from "./models/Alert.js";
-import { protect, requireAdminOrBarangay } from "./middleware/auth.js";
+import { protect, requireRole, requireAssignedBarangayIfOfficial, scopeToAssignedBarangay, rejectIfOutsideAssignedBarangay } from "./middleware/auth.js";
 import rateLimit from "express-rate-limit";
 
 dotenv.config();
@@ -64,6 +65,10 @@ const loginLimiter = rateLimit({
   message: { success: false, error: "Too many login attempts, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  // Only enforce in production — during local dev (nodemon, no NODE_ENV set)
+  // this was tripping constantly from normal testing/retries and required
+  // a server restart to clear, with no brute-force benefit on a dev machine.
+  skip: () => process.env.NODE_ENV !== "production",
 });
 
 const publicPostLimiter = rateLimit({
@@ -95,6 +100,7 @@ app.use("/api/push", pushRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/reports", uploadImagesRoutes);
 app.use("/api/admin", adminMetricsRoutes);
+app.use("/api/family", familyRoutes);
 app.use("/uploads", express.static(join(dirname(fileURLToPath(import.meta.url)), "uploads")));
 
 // Socket.IO
@@ -127,14 +133,14 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// GET all reports — admin only
-app.get("/api/reports", protect, requireAdminOrBarangay, async (req, res) => {
+// GET all reports — CDRRMO (city-wide) / Barangay Official (own barangay only)
+app.get("/api/reports", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1)
       return res.status(500).json({ success: false, error: "Database not connected" });
     const reports = await mongoose.connection.db
       .collection("emergency_reports")
-      .find({})
+      .find(scopeToAssignedBarangay(req, "reporterBarangayKey"))
       .sort({ timestamp: -1 })
       .toArray();
     res.json({ success: true, reports });
@@ -145,7 +151,7 @@ app.get("/api/reports", protect, requireAdminOrBarangay, async (req, res) => {
 });
 
 // Receives push from mobile app and broadcasts via Socket.IO + web push
-app.post("/api/notify-emergency", protect, requireAdminOrBarangay, (req, res) => {
+app.post("/api/notify-emergency", protect, requireRole("cdrrmo", "barangay_official"), (req, res) => {
   const report = req.body;
   io.emit("new_emergency_report", {
     id: report.reportId,
@@ -176,7 +182,7 @@ app.post("/api/notify-emergency", protect, requireAdminOrBarangay, (req, res) =>
 });
 
 // Update report status
-app.post("/api/reports/update-status", protect, requireAdminOrBarangay, async (req, res) => {
+app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     const { reportId, status, adminNotes, adminEmail } = req.body;
 
@@ -187,9 +193,12 @@ app.post("/api/reports/update-status", protect, requireAdminOrBarangay, async (r
     if (!VALID_STATUSES.includes(status))
       return res.status(400).json({ success: false, error: "Invalid status value" });
 
-    const report = status === "approved"
-      ? await mongoose.connection.db.collection("emergency_reports").findOne({ _id: new mongoose.Types.ObjectId(reportId) })
-      : null;
+    const existingReport = await mongoose.connection.db.collection("emergency_reports").findOne({ _id: new mongoose.Types.ObjectId(reportId) });
+    if (!existingReport)
+      return res.status(404).json({ success: false, error: "Report not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, existingReport.reporterBarangayKey)) return;
+
+    const report = status === "approved" ? existingReport : null;
 
     const result = await mongoose.connection.db
       .collection("emergency_reports")
@@ -262,12 +271,18 @@ app.post("/api/reports/update-status", protect, requireAdminOrBarangay, async (r
 });
 
 // Resolve report
-app.post("/api/reports/resolve", protect, requireAdminOrBarangay, async (req, res) => {
+app.post("/api/reports/resolve", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     const { reportId, resolvedBy, resolutionNotes } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(reportId))
       return res.status(400).json({ success: false, error: "Invalid report ID" });
+
+    const existingReport = await mongoose.connection.db.collection("emergency_reports").findOne({ _id: new mongoose.Types.ObjectId(reportId) });
+    if (!existingReport)
+      return res.status(404).json({ success: false, error: "Report not found" });
+    if (rejectIfOutsideAssignedBarangay(req, res, existingReport.reporterBarangayKey)) return;
+
     const result = await mongoose.connection.db
       .collection("emergency_reports")
       .updateOne(
