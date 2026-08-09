@@ -10,6 +10,8 @@ import {
   UserRound,
   Settings,
   BookOpen,
+  ShieldAlert,
+  History,
 } from "lucide-react";
 
 export const ROLE_LABELS = {
@@ -27,9 +29,12 @@ export const ROLE_HOME = {
 };
 
 export const ROLE_NAV_ITEMS = {
-  // System Admin is web-platform/account-management only — zero disaster-ops access.
+  // System Admin is web-platform/account-management only — zero disaster-ops
+  // access, except Chat Monitoring (full reporter-identity visibility there).
   system_admin: [
     { icon: Users, label: "Manage Users", href: "/manage-users" },
+    { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
+    { icon: History, label: "Audit Logs", href: "/audit-logs" },
     { icon: Settings, label: "System Settings", href: "/system-settings" },
   ],
   // CDRRMO — full city-wide disaster-ops access (all barangays).
@@ -38,6 +43,8 @@ export const ROLE_NAV_ITEMS = {
     { icon: Volume2, label: "Reports", href: "/reports" },
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
+    { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
+    { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
   ],
   // Barangay Official — scoped to their assigned barangay only (enforced server-side).
   barangay_official: [
@@ -45,6 +52,7 @@ export const ROLE_NAV_ITEMS = {
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
     { icon: Bell, label: "Alerts", href: "/alerts" },
+    { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
     { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
     { icon: UserRound, label: "Family Members", href: "/family-members" },
   ],

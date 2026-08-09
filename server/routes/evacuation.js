@@ -692,7 +692,7 @@ router.get("/centers", protect, async (req, res) => {
 });
 
 // ── PUT /api/evacuation/centers/:id/occupancy ────────────────────────────────
-router.put("/centers/:id/occupancy", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
+router.put("/centers/:id/occupancy", protect, requireRole("cdrrmo"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const center = await EvacuationCenter.findById(req.params.id);
@@ -731,7 +731,7 @@ router.put("/centers/:id/occupancy", protect, requireRole("cdrrmo", "barangay_of
 });
 
 // ── PUT /api/evacuation/centers/:id/capacity ─────────────────────────────────
-router.put("/centers/:id/capacity", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
+router.put("/centers/:id/capacity", protect, requireRole("cdrrmo"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const center = await EvacuationCenter.findById(req.params.id);
@@ -768,7 +768,7 @@ router.put("/centers/:id/capacity", protect, requireRole("cdrrmo", "barangay_off
 });
 
 // ── POST /api/evacuation/centers/:id/reset ───────────────────────────────────
-router.post("/centers/:id/reset", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
+router.post("/centers/:id/reset", protect, requireRole("cdrrmo"), async (req, res) => {
   try {
     const userName = await resolveUserName(req);
     const center = await EvacuationCenter.findById(req.params.id);

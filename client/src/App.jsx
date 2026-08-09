@@ -15,6 +15,8 @@ import SystemSettingsPage from "./pages/SystemSettingsPage";
 import FamilyMembersPage from "./pages/FamilyMembersPage";
 import SafetyTipsPage from "./pages/SafetyTipsPage";
 import SafetyTipDetailPage from "./pages/SafetyTipDetailPage";
+import ChatMonitoringPage from "./pages/ChatMonitoringPage";
+import AuditLogsPage from "./pages/AuditLogsPage";
 import { getUserRole, getHomePath, ROLE_HOME, ROLE_NAV_ITEMS } from "./config/roleModules";
 
 function clearSession() {
@@ -221,6 +223,10 @@ export default function App() {
           path="/safety-tips/:slug"
           element={<ProtectedLayout Page={SafetyTipDetailPage} roles={rolesFor("/safety-tips")} />}
         />
+        <Route
+          path="/chat-monitoring"
+          element={<ProtectedLayout Page={ChatMonitoringPage} roles={rolesFor("/chat-monitoring")} />}
+        />
 
         {/* Protected pages — System Admin (web-platform/account management, zero ops access) */}
         <Route
@@ -230,6 +236,10 @@ export default function App() {
         <Route
           path="/system-settings"
           element={<ProtectedLayout Page={SystemSettingsPage} roles={rolesFor("/system-settings")} />}
+        />
+        <Route
+          path="/audit-logs"
+          element={<ProtectedLayout Page={AuditLogsPage} roles={rolesFor("/audit-logs")} />}
         />
 
         {/* Catch-all */}

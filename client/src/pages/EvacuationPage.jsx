@@ -712,9 +712,9 @@ export default function EvacuationPage() {
     BARANGAYS.find((b) => b.value === barangay)?.label ?? barangay;
   const hotlines = BARANGAYS.find((b) => b.value === barangay)?.hotlines ?? [];
 
-  // Full center management (create/availability, activity log) is CDRRMO-only;
-  // Barangay Official keeps occupancy/capacity updates (rendered unconditionally
-  // below) but not these controls.
+  // Evacuation module is CDRRMO-only for editing; Barangay Official is view-only
+  // (occupancy/capacity/reset/availability controls, create, and the activity
+  // log are all hidden below and rejected server-side for non-CDRRMO roles).
   const isAdmin = getUserRole() === "cdrrmo";
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -935,13 +935,15 @@ export default function EvacuationPage() {
                             {s.label}
                           </span>
                         )}
-                        <button
-                          onClick={() => setEditId(c._id)}
-                          disabled={isOffline}
-                          className="text-gray-300 hover:text-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <Settings size={15} />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setEditId(c._id)}
+                            disabled={isOffline}
+                            className="text-gray-300 hover:text-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Settings size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -967,74 +969,85 @@ export default function EvacuationPage() {
                         <Users size={12} className="text-gray-400 shrink-0" />
                         <span className="text-xs text-gray-400">Evacuees:</span>
 
-                        <button
-                          onClick={() => adjust(c._id, -1)}
-                          disabled={isOffline || c.occupancy <= 0}
-                          className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
-                        >
-                          −
-                        </button>
+                        {isAdmin ? (
+                          <>
+                            <button
+                              onClick={() => adjust(c._id, -1)}
+                              disabled={isOffline || c.occupancy <= 0}
+                              className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
+                            >
+                              −
+                            </button>
 
-                        {isEditing ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number"
-                              min={0}
-                              max={c.capacity}
-                              value={inputVal}
-                              autoFocus
-                              onChange={(e) => setInputVal(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") commitInput(c._id);
-                                if (e.key === "Escape") {
-                                  setInputId(null);
-                                  setInputVal("");
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={c.capacity}
+                                  value={inputVal}
+                                  autoFocus
+                                  onChange={(e) => setInputVal(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") commitInput(c._id);
+                                    if (e.key === "Escape") {
+                                      setInputId(null);
+                                      setInputVal("");
+                                    }
+                                  }}
+                                  className="w-16 text-center text-sm font-bold border border-blue-400 rounded-md px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                />
+                                <button
+                                  onClick={() => commitInput(c._id)}
+                                  className="text-green-600 hover:text-green-700"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setInputId(null);
+                                    setInputVal("");
+                                  }}
+                                  className="text-gray-400 hover:text-gray-600"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => openInput(c._id, c.occupancy)}
+                                disabled={isOffline}
+                                title={
+                                  isOffline
+                                    ? "Editing disabled while offline"
+                                    : "Click to type a number"
                                 }
-                              }}
-                              className="w-16 text-center text-sm font-bold border border-blue-400 rounded-md px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            />
+                                className="text-sm font-bold text-gray-800 hover:text-blue-600 hover:underline min-w-[2rem] text-center disabled:no-underline disabled:text-gray-500 disabled:cursor-not-allowed"
+                              >
+                                {c.occupancy}
+                              </button>
+                            )}
+
+                            <span className="text-xs text-gray-400 font-medium">
+                              / {c.capacity}
+                            </span>
+
                             <button
-                              onClick={() => commitInput(c._id)}
-                              className="text-green-600 hover:text-green-700"
+                              onClick={() => adjust(c._id, +1)}
+                              disabled={isOffline || c.occupancy >= c.capacity}
+                              className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
                             >
-                              <Check size={14} />
+                              +
                             </button>
-                            <button
-                              onClick={() => {
-                                setInputId(null);
-                                setInputVal("");
-                              }}
-                              className="text-gray-400 hover:text-gray-600"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
+                          </>
                         ) : (
-                          <button
-                            onClick={() => openInput(c._id, c.occupancy)}
-                            disabled={isOffline}
-                            title={
-                              isOffline
-                                ? "Editing disabled while offline"
-                                : "Click to type a number"
-                            }
-                            className="text-sm font-bold text-gray-800 hover:text-blue-600 hover:underline min-w-[2rem] text-center disabled:no-underline disabled:text-gray-500 disabled:cursor-not-allowed"
-                          >
-                            {c.occupancy}
-                          </button>
+                          <span className="text-sm font-bold text-gray-800">
+                            {c.occupancy}{" "}
+                            <span className="text-xs text-gray-400 font-medium">
+                              / {c.capacity}
+                            </span>
+                          </span>
                         )}
-
-                        <span className="text-xs text-gray-400 font-medium">
-                          / {c.capacity}
-                        </span>
-
-                        <button
-                          onClick={() => adjust(c._id, +1)}
-                          disabled={isOffline || c.occupancy >= c.capacity}
-                          className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
-                        >
-                          +
-                        </button>
                       </div>
 
                       <span className="text-[10px] text-gray-400">

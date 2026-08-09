@@ -12,12 +12,14 @@ import hazardRoutes from "./routes/hazard.js";
 import alertRoutes from "./routes/alerts.js";
 import reportRoutes from "./routes/reports.js";
 import evacuationRoutes from "./routes/evacuation.js";
-import communityRoutes from "./routes/community.js";
 import pushRoutes, { sendNotificationToAll, sendAdminNotification } from "./routes/push.js";
 import syncRoutes from "./routes/sync.js";
 import uploadImagesRoutes from "./routes/uploadImages.js";
 import adminMetricsRoutes from "./routes/adminMetrics.js";
 import familyRoutes from "./routes/family.js";
+import messageReportRoutes from "./routes/messageReports.js";
+import chatModerationRoutes from "./routes/chatModeration.js";
+import auditLogRoutes from "./routes/auditLogs.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import Alert from "./models/Alert.js";
@@ -86,8 +88,6 @@ app.set("io", io);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/reports/create", publicPostLimiter);
 app.use("/api/reports/upload-images", publicPostLimiter);
-app.post("/api/community/requests", publicPostLimiter);
-app.post("/api/community/donations", publicPostLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -95,12 +95,14 @@ app.use("/api/hazard", hazardRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/evacuation", evacuationRoutes);
-app.use("/api/community", communityRoutes);
 app.use("/api/push", pushRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/reports", uploadImagesRoutes);
 app.use("/api/admin", adminMetricsRoutes);
 app.use("/api/family", familyRoutes);
+app.use("/api/message-reports", messageReportRoutes);
+app.use("/api/chat-monitoring", chatModerationRoutes);
+app.use("/api/audit-logs", auditLogRoutes);
 app.use("/uploads", express.static(join(dirname(fileURLToPath(import.meta.url)), "uploads")));
 
 // Socket.IO
@@ -184,7 +186,7 @@ app.post("/api/notify-emergency", protect, requireRole("cdrrmo", "barangay_offic
 // Update report status
 app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
-    const { reportId, status, adminNotes, adminEmail } = req.body;
+    const { reportId, status, adminNotes } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(reportId))
       return res.status(400).json({ success: false, error: "Invalid report ID" });
@@ -199,6 +201,10 @@ app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_
     if (rejectIfOutsideAssignedBarangay(req, res, existingReport.reporterBarangayKey)) return;
 
     const report = status === "approved" ? existingReport : null;
+    // Actor identity comes from the authenticated session, never client input
+    // (a request-body "adminEmail" field would let anyone spoof who's
+    // recorded as having reviewed this report).
+    const actorName = req.user.name || req.user.email || "admin";
 
     const result = await mongoose.connection.db
       .collection("emergency_reports")
@@ -208,14 +214,14 @@ app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_
           $set: {
             status,
             adminNotes: adminNotes || "",
-            reviewedBy: adminEmail || "admin",
+            reviewedBy: actorName,
             reviewedAt: new Date().toISOString(),
             ...(isLocalMode && { syncedToCloud: false }),
           },
           $push: {
             logs: {
               action: status,
-              by: adminEmail || "admin",
+              by: actorName,
               at: new Date().toISOString(),
               notes: adminNotes || "",
             },
@@ -273,7 +279,7 @@ app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_
 // Resolve report
 app.post("/api/reports/resolve", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
-    const { reportId, resolvedBy, resolutionNotes } = req.body;
+    const { reportId, resolutionNotes } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(reportId))
       return res.status(400).json({ success: false, error: "Invalid report ID" });
@@ -283,6 +289,11 @@ app.post("/api/reports/resolve", protect, requireRole("cdrrmo", "barangay_offici
       return res.status(404).json({ success: false, error: "Report not found" });
     if (rejectIfOutsideAssignedBarangay(req, res, existingReport.reporterBarangayKey)) return;
 
+    // Actor identity comes from the authenticated session, never client input
+    // (a request-body "resolvedBy" field would let anyone spoof who's
+    // recorded as having resolved this report).
+    const actorName = req.user.name || req.user.email || "admin";
+
     const result = await mongoose.connection.db
       .collection("emergency_reports")
       .updateOne(
@@ -290,7 +301,7 @@ app.post("/api/reports/resolve", protect, requireRole("cdrrmo", "barangay_offici
         {
           $set: {
             status: "resolved",
-            resolvedBy: resolvedBy || "admin",
+            resolvedBy: actorName,
             resolvedAt: new Date().toISOString(),
             resolutionNotes: resolutionNotes || "",
             ...(isLocalMode && { syncedToCloud: false }),
@@ -298,7 +309,7 @@ app.post("/api/reports/resolve", protect, requireRole("cdrrmo", "barangay_offici
           $push: {
             logs: {
               action: "resolved",
-              by: resolvedBy || "admin",
+              by: actorName,
               at: new Date().toISOString(),
               notes: resolutionNotes || "",
             },
