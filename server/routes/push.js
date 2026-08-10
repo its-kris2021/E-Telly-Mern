@@ -132,7 +132,7 @@ export async function sendPushToUser(userId, payload) {
           if (err.statusCode === 410) await PushSubscription.deleteOne({ endpoint: sub.endpoint });
         })
     ),
-    sendFCMToUser(userId, payload).catch(() => {}),
+    sendFCMToUser(userId, payload).catch((err) => console.error("[Push] sendFCMToUser failed:", err.message)),
   ]);
 }
 

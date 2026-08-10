@@ -37,6 +37,22 @@ function formatDate(value) {
   });
 }
 
+// label, and either a fixed duration in hours (temporary) or null (permanent).
+const RESTRICTION_PRESETS = [
+  { key: "temp24", label: "24 Hours", type: "temporary", durationHours: 24 },
+  { key: "temp3d", label: "3 Days", type: "temporary", durationHours: 72 },
+  { key: "temp7d", label: "7 Days", type: "temporary", durationHours: 168 },
+  { key: "permanent", label: "Permanent", type: "permanent", durationHours: null },
+];
+
+function restrictionBadge(reportedUser) {
+  if (!reportedUser?.restricted) return null;
+  if (reportedUser.permanent) return "Permanently Restricted";
+  return reportedUser.restrictionEndAt
+    ? `Restricted until ${formatDate(reportedUser.restrictionEndAt)}`
+    : "Restricted";
+}
+
 export default function ChatReportCaseTile({ summary, onChanged }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -48,6 +64,13 @@ export default function ChatReportCaseTile({ summary, onChanged }) {
   const [pendingAction, setPendingAction] = useState(null);
   const [actionNote, setActionNote] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [violationHistory, setViolationHistory] = useState([]);
+  // Restriction panel state, independent of the case pending/resolved flow —
+  // a manual restriction is a per-user action, not scoped to this one case.
+  // null | one of RESTRICTION_PRESETS[].key | "clear".
+  const [restrictionAction, setRestrictionAction] = useState(null);
+  const [restrictionNote, setRestrictionNote] = useState("");
+  const [isRestrictionUpdating, setIsRestrictionUpdating] = useState(false);
 
   const statusDisplay = STATUS_DISPLAY[detail?.case.status ?? summary.status] || STATUS_DISPLAY.pending;
 
@@ -62,10 +85,24 @@ export default function ChatReportCaseTile({ summary, onChanged }) {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to load case");
       setDetail(data);
+      await fetchViolationHistory(data.case.reportedUser?.id);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchViolationHistory = async (userId) => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/chat-monitoring/users/${userId}/summary`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setViolationHistory(data.moderation?.history || []);
+    } catch {
+      // Non-critical — the modal still works without violation history.
     }
   };
 
@@ -108,6 +145,64 @@ export default function ChatReportCaseTile({ summary, onChanged }) {
       return false;
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const applyRestriction = async (preset, note) => {
+    const userId = detail?.case.reportedUser?.id;
+    if (!userId) return false;
+    setIsRestrictionUpdating(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/chat-monitoring/users/${userId}/restriction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ type: preset.type, durationHours: preset.durationHours ?? undefined, note }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to apply restriction");
+      setDetail((prev) => prev ? { ...prev, case: { ...prev.case, reportedUser: { ...prev.case.reportedUser, ...data.moderation } } } : prev);
+      await fetchViolationHistory(userId);
+      onChanged?.();
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setIsRestrictionUpdating(false);
+    }
+  };
+
+  const removeRestriction = async (note) => {
+    const userId = detail?.case.reportedUser?.id;
+    if (!userId) return false;
+    setIsRestrictionUpdating(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/chat-monitoring/users/${userId}/restriction`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ note }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to remove restriction");
+      setDetail((prev) => prev ? { ...prev, case: { ...prev.case, reportedUser: { ...prev.case.reportedUser, ...data.moderation } } } : prev);
+      await fetchViolationHistory(userId);
+      onChanged?.();
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setIsRestrictionUpdating(false);
+    }
+  };
+
+  const confirmRestrictionAction = async () => {
+    const note = restrictionNote.trim();
+    const preset = RESTRICTION_PRESETS.find((p) => p.key === restrictionAction);
+    const ok = preset ? await applyRestriction(preset, note) : await removeRestriction(note);
+    if (ok) {
+      setRestrictionAction(null);
+      setRestrictionNote("");
     }
   };
 
@@ -159,9 +254,9 @@ export default function ChatReportCaseTile({ summary, onChanged }) {
                   <h3 className="text-base font-semibold text-gray-900">
                     {summary.reportedUser?.name || "Unknown user"}
                   </h3>
-                  {summary.reportedUser?.restricted && (
+                  {restrictionBadge(summary.reportedUser) && (
                     <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide">
-                      Restricted
+                      {restrictionBadge(summary.reportedUser)}
                     </span>
                   )}
                   <div className="flex items-center gap-1.5">
@@ -200,9 +295,9 @@ export default function ChatReportCaseTile({ summary, onChanged }) {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-2xl font-bold text-gray-900">{summary.reportedUser?.name || "Unknown user"}</h2>
-                {(detail?.case.reportedUser.restricted ?? summary.reportedUser?.restricted) && (
+                {restrictionBadge(detail?.case.reportedUser ?? summary.reportedUser) && (
                   <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wide">
-                    Restricted
+                    {restrictionBadge(detail?.case.reportedUser ?? summary.reportedUser)}
                   </span>
                 )}
               </div>
@@ -229,6 +324,84 @@ export default function ChatReportCaseTile({ summary, onChanged }) {
 
             {detail && !loading && (
               <>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="text-sm font-medium text-gray-700">Chat Restriction</p>
+                    <span className={`text-xs font-semibold ${detail.case.reportedUser.restricted ? "text-red-600" : "text-gray-500"}`}>
+                      {restrictionBadge(detail.case.reportedUser) || "Not restricted"}
+                    </span>
+                  </div>
+
+                  {restrictionAction ? (
+                    <div className="mt-3 space-y-3">
+                      <p className="text-xs text-gray-600">
+                        {restrictionAction === "clear"
+                          ? "Remove the active restriction — the user regains chat access immediately."
+                          : `Apply a ${RESTRICTION_PRESETS.find((p) => p.key === restrictionAction)?.label} restriction.`}
+                      </p>
+                      <textarea
+                        value={restrictionNote}
+                        onChange={(e) => setRestrictionNote(e.target.value)}
+                        placeholder="Reason / note for the moderation record (optional)…"
+                        rows={2}
+                        className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setRestrictionAction(null); setRestrictionNote(""); }}
+                          disabled={isRestrictionUpdating}
+                          className="flex-1 px-3 py-1.5 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-xs disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={confirmRestrictionAction}
+                          disabled={isRestrictionUpdating}
+                          className="flex-1 px-3 py-1.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors text-xs disabled:opacity-50"
+                        >
+                          {isRestrictionUpdating ? "Saving…" : "Confirm"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {RESTRICTION_PRESETS.map((preset) => (
+                        <button
+                          key={preset.key}
+                          onClick={() => setRestrictionAction(preset.key)}
+                          className="px-2.5 py-1.5 border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                      {detail.case.reportedUser.restricted && (
+                        <button
+                          onClick={() => setRestrictionAction("clear")}
+                          className="px-2.5 py-1.5 border border-green-300 text-green-700 text-xs font-semibold rounded-lg hover:bg-green-50 transition-colors"
+                        >
+                          Remove Restriction
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {violationHistory.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1.5">Violation History ({violationHistory.length})</p>
+                    <div className="max-h-40 overflow-y-auto space-y-1.5">
+                      {[...violationHistory].reverse().map((h, i) => (
+                        <div key={i} className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
+                          <span className="font-semibold text-gray-700 capitalize">{h.action.replace(/_/g, " ")}</span>
+                          <span className="text-gray-500"> — {h.byName} ({h.byRole})</span>
+                          {h.note && <p className="text-gray-500 mt-0.5">{h.note}</p>}
+                          <p className="text-gray-400 mt-0.5">{formatDate(h.at)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-sm font-medium text-gray-700">Reported Message</p>
                   <p className="text-gray-900 text-sm mt-1 bg-gray-50 border border-gray-200 rounded-lg p-3">

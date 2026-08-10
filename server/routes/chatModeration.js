@@ -10,6 +10,17 @@ import {
 import ChatModerationCase, { CASE_STATUSES } from "../models/ChatModerationCase.js";
 import ChatUserModerationProfile from "../models/ChatUserModerationProfile.js";
 import MessageReport from "../models/MessageReport.js";
+import User from "../models/user.js";
+import { resolveBarangayKey } from "../config/barangays.js";
+import {
+  getOrCreateProfile,
+  refreshExpiry,
+  tierForViolationNumber,
+  formatUserMessage,
+  computeStatus,
+  applyManualRestriction,
+  clearRestriction,
+} from "../services/chatRestrictionService.js";
 
 const router = express.Router();
 
@@ -36,18 +47,6 @@ function reportedUserObjectId(c) {
     : c.reportedUserId;
 }
 
-// Loads a reported user's cross-case moderation profile, creating an empty
-// one on first touch (e.g. their first dismissal or warning). Warnings/
-// restrictions live here rather than on the case because they must
-// accumulate across every case ever opened against this person.
-async function getOrCreateProfile(userId) {
-  return ChatUserModerationProfile.findOneAndUpdate(
-    { userId },
-    { $setOnInsert: { userId, warningCount: 0, restricted: false, restrictedAt: null } },
-    { upsert: true, returnDocument: "after" },
-  );
-}
-
 // Shape shared by the list and detail views. Deliberately never includes
 // individual reporter identity — that's assembled separately in the detail
 // route, gated to system_admin only. `profile` is the reported user's
@@ -67,6 +66,9 @@ function caseSummary(c, profile) {
       barangayKey: c.reportedUserBarangayKey,
       warningCount: profile?.warningCount ?? 0,
       restricted: profile?.restricted ?? false,
+      permanent: profile?.restrictionType === "permanent",
+      restrictionType: profile?.restrictionType ?? "none",
+      restrictionEndAt: profile?.restrictionEndAt ?? null,
     },
     messageSnapshot: c.messageSnapshot,
     reportCount: c.reportCount,
@@ -308,6 +310,9 @@ router.post("/cases/:messageId/warn", async (req, res) => {
     };
 
     const profile = await getOrCreateProfile(userId);
+    // Clear a stale expired restriction first so this violation's escalation
+    // is computed against the user's real current state.
+    refreshExpiry(profile, now);
     profile.warningCount += 1;
     profile.history.push({ ...baseEntry, action: "warning_issued", note: trimmedNote });
     caseDoc.logs.push({
@@ -315,12 +320,20 @@ router.post("/cases/:messageId/warn", async (req, res) => {
       at: now, notes: trimmedNote,
     });
 
+    // Escalation ladder: 1st violation -> warning only, 2nd -> 24h, 3rd -> 3
+    // days, 4th and beyond -> 7 days. Permanent restriction is never applied
+    // automatically — that's an admin-only manual action for severe/repeated
+    // cases (see POST /users/:userId/restriction).
     let restrictionJustApplied = false;
-    if (profile.warningCount === 2 && !profile.restricted) {
+    const tier = tierForViolationNumber(profile.warningCount);
+    if (tier.type === "temporary") {
       profile.restricted = true;
       profile.restrictedAt = now;
+      profile.restrictionType = "temporary";
+      profile.restrictionStartAt = now;
+      profile.restrictionEndAt = new Date(now.getTime() + tier.durationMs);
       restrictionJustApplied = true;
-      const restrictionNote = "Automatically applied after 2nd confirmed violation";
+      const restrictionNote = `Automatically applied after violation #${profile.warningCount} (${tier.label} chat restriction)`;
       profile.history.push({ ...baseEntry, action: "restriction_applied", note: restrictionNote });
       caseDoc.logs.push({
         action: "restriction_applied", byId: req.user.id, byName: actorName, byRole: req.user.role,
@@ -350,6 +363,7 @@ router.post("/cases/:messageId/warn", async (req, res) => {
         warningCount: profile.warningCount,
         restricted: profile.restricted,
         restrictedAt: profile.restrictedAt,
+        ...computeStatus(profile),
       },
     });
   } catch (err) {
@@ -432,16 +446,112 @@ router.get("/users/:userId/summary", async (req, res) => {
       success: true,
       userId: req.params.userId,
       summary,
-      moderation: {
-        warningCount: profile?.warningCount ?? 0,
-        restricted: profile?.restricted ?? false,
-        restrictedAt: profile?.restrictedAt ?? null,
-        history: profile?.history ?? [],
-      },
+      moderation: profile
+        ? { ...computeStatus(profile), restrictedAt: profile.restrictedAt, history: profile.history ?? [] }
+        : {
+            warningCount: 0,
+            restricted: false,
+            permanent: false,
+            restrictionType: "none",
+            restrictionStartAt: null,
+            restrictionEndAt: null,
+            restrictedAt: null,
+            message: null,
+            history: [],
+          },
     });
   } catch (err) {
     console.error("[ChatModeration] user summary failed:", err.message);
     res.status(500).json({ message: "Failed to load user summary" });
+  }
+});
+
+// Resolves a target user's barangay from their profile address (same
+// resolution messageReports.js uses to stamp reportedUserBarangayKey) and
+// 403s a barangay_official acting outside their own turf. Returns the
+// resolved user doc on success, or null after already sending a response.
+async function loadTargetUserInBarangayScope(req, res, userId) {
+  const targetUser = await User.findById(userId).select("address");
+  if (!targetUser) {
+    res.status(404).json({ message: "User not found" });
+    return null;
+  }
+  const targetBarangayKey = resolveBarangayKey(targetUser.address);
+  if (rejectIfOutsideAssignedBarangay(req, res, targetBarangayKey)) return null;
+  return targetUser;
+}
+
+// POST /api/chat-monitoring/users/:userId/restriction — manual admin action.
+// Applies a restriction independent of the case/warn escalation ladder:
+// either a temporary override (custom duration) or — for severe or repeated
+// violations — a permanent restriction, which the automatic ladder never
+// applies on its own.
+router.post("/users/:userId/restriction", async (req, res) => {
+  try {
+    const userId = toObjectId(req.params.userId);
+    if (!userId) return res.status(400).json({ message: "Invalid userId" });
+
+    const { type, durationHours, note } = req.body;
+    if (!["temporary", "permanent"].includes(type)) {
+      return res.status(400).json({ message: "type must be 'temporary' or 'permanent'" });
+    }
+
+    let durationMs = null;
+    if (type === "temporary") {
+      const hours = Number(durationHours);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        return res.status(400).json({ message: "durationHours must be a positive number for a temporary restriction" });
+      }
+      durationMs = hours * 60 * 60 * 1000;
+    }
+
+    if (!(await loadTargetUserInBarangayScope(req, res, userId))) return;
+
+    const actorName = req.user.name || req.user.email || "staff";
+    const trimmedNote = typeof note === "string" ? note.trim().slice(0, 1000) : "";
+
+    const profile = await applyManualRestriction({
+      userId,
+      type,
+      durationMs,
+      actorId: req.user.id,
+      actorName,
+      actorRole: req.user.role,
+      note: trimmedNote,
+    });
+
+    res.json({ success: true, moderation: computeStatus(profile) });
+  } catch (err) {
+    console.error("[ChatModeration] manual restriction failed:", err.message);
+    res.status(500).json({ message: "Failed to apply restriction" });
+  }
+});
+
+// DELETE /api/chat-monitoring/users/:userId/restriction — clears whatever
+// restriction (temporary or permanent) is currently active on this user.
+router.delete("/users/:userId/restriction", async (req, res) => {
+  try {
+    const userId = toObjectId(req.params.userId);
+    if (!userId) return res.status(400).json({ message: "Invalid userId" });
+
+    if (!(await loadTargetUserInBarangayScope(req, res, userId))) return;
+
+    const { note } = req.body;
+    const actorName = req.user.name || req.user.email || "staff";
+    const trimmedNote = typeof note === "string" ? note.trim().slice(0, 1000) : "";
+
+    const profile = await clearRestriction({
+      userId,
+      actorId: req.user.id,
+      actorName,
+      actorRole: req.user.role,
+      note: trimmedNote,
+    });
+
+    res.json({ success: true, moderation: computeStatus(profile) });
+  } catch (err) {
+    console.error("[ChatModeration] clear restriction failed:", err.message);
+    res.status(500).json({ message: "Failed to remove restriction" });
   }
 });
 

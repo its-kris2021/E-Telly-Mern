@@ -1,6 +1,7 @@
 import express from "express";
 import messageReportRoutes from "../../routes/messageReports.js";
 import chatModerationRoutes from "../../routes/chatModeration.js";
+import chatRestrictionRoutes from "../../routes/chatRestriction.js";
 import auditLogRoutes from "../../routes/auditLogs.js";
 
 // Deliberately does not import server/index.js — that file connects to the
@@ -13,6 +14,7 @@ export function buildTestApp() {
   app.use(express.json());
   app.use("/api/message-reports", messageReportRoutes);
   app.use("/api/chat-monitoring", chatModerationRoutes);
+  app.use("/api/chat-restriction", chatRestrictionRoutes);
   app.use("/api/audit-logs", auditLogRoutes);
   return app;
 }

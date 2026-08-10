@@ -33,6 +33,7 @@ function urlToRoute(url) {
   if (url.includes("/reports"))   return "reports";
   if (url.includes("/community")) return "community";
   if (url.includes("/resources")) return "resources";
+  if (url.includes("/chats"))     return "chats";
   return "home";
 }
 
@@ -67,26 +68,38 @@ function buildMulticastMessage(payload, tokens) {
       tag:    payload.tag    ?? "alert",
       urgent: String(urgent),
       route:  urlToRoute(payload.url),
+      // FCM data payload values must all be strings — callers (e.g. the
+      // chat push in index.js) pass extra fields like senderId here for
+      // deep-linking that the base url/tag/urgent/route shape doesn't cover.
+      ...(payload.data ?? {}),
     },
     tokens,
   };
 }
 
 export async function sendFCMToUser(userId, payload) {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON && !existsSync(SERVICE_ACCOUNT_PATH)) return;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON && !existsSync(SERVICE_ACCOUNT_PATH)) {
+    console.log(`[FCM] No Firebase credentials configured — skipping push to user ${userId}`);
+    return;
+  }
   initFirebase();
 
   const tokenDocs = await FcmToken.find({ userId }, "token").lean();
-  if (!tokenDocs.length) return;
+  if (!tokenDocs.length) {
+    console.log(`[FCM] No registered token(s) for user ${userId} — skipping`);
+    return;
+  }
 
   const tokens = tokenDocs.map((d) => d.token);
   const message = buildMulticastMessage(payload, tokens);
   const response = await admin.messaging().sendEachForMulticast(message);
+  console.log(`[FCM] Sent to user ${userId}: ${response.successCount} succeeded, ${response.failureCount} failed`);
 
   const toDelete = [];
   response.responses.forEach((r, idx) => {
     if (!r.success) {
       const code = r.error?.code;
+      console.error("[FCM] Send to user failed →", tokens[idx].slice(0, 20), code);
       if (
         code === "messaging/registration-token-not-registered" ||
         code === "messaging/invalid-registration-token"

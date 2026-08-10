@@ -12,17 +12,19 @@ import hazardRoutes from "./routes/hazard.js";
 import alertRoutes from "./routes/alerts.js";
 import reportRoutes from "./routes/reports.js";
 import evacuationRoutes from "./routes/evacuation.js";
-import pushRoutes, { sendNotificationToAll, sendAdminNotification } from "./routes/push.js";
+import pushRoutes, { sendNotificationToAll, sendAdminNotification, sendPushToUser } from "./routes/push.js";
 import syncRoutes from "./routes/sync.js";
 import uploadImagesRoutes from "./routes/uploadImages.js";
 import adminMetricsRoutes from "./routes/adminMetrics.js";
 import familyRoutes from "./routes/family.js";
 import messageReportRoutes from "./routes/messageReports.js";
 import chatModerationRoutes from "./routes/chatModeration.js";
+import chatRestrictionRoutes from "./routes/chatRestriction.js";
 import auditLogRoutes from "./routes/auditLogs.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import Alert from "./models/Alert.js";
+import { getRestrictionStatus } from "./services/chatRestrictionService.js";
 import { protect, requireRole, requireAssignedBarangayIfOfficial, scopeToAssignedBarangay, rejectIfOutsideAssignedBarangay } from "./middleware/auth.js";
 import rateLimit from "express-rate-limit";
 
@@ -102,6 +104,7 @@ app.use("/api/admin", adminMetricsRoutes);
 app.use("/api/family", familyRoutes);
 app.use("/api/message-reports", messageReportRoutes);
 app.use("/api/chat-monitoring", chatModerationRoutes);
+app.use("/api/chat-restriction", chatRestrictionRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/uploads", express.static(join(dirname(fileURLToPath(import.meta.url)), "uploads")));
 
@@ -417,6 +420,90 @@ mongoose
       console.log("[ChangeStream] Watching emergency_reports for new inserts");
     } catch (err) {
       console.error("[ChangeStream] Failed to start:", err.message);
+    }
+
+    // Server-side chat-restriction enforcement. Chat messages are written
+    // directly into MongoDB by the Flutter mobile app (see routes/
+    // messageReports.js), not through any endpoint in this server, so a
+    // restricted resident can't be blocked "at the door" here. Instead this
+    // watches every insert and immediately deletes any message whose sender
+    // is currently restricted, notifying them over their `user-${id}` socket
+    // room — enforcement that holds even if the mobile client never checks
+    // GET /api/chat-restriction/status itself, and that survives
+    // refresh/logout-login since it's re-evaluated from the DB on every
+    // single insert rather than trusted from any client-held state.
+    try {
+      const messagesCol = mongoose.connection.db.collection("messages");
+      const messagesChangeStream = messagesCol.watch([{ $match: { operationType: "insert" } }]);
+
+      messagesChangeStream.on("change", async (change) => {
+        const doc = change.fullDocument;
+        if (!doc?.senderId) return;
+        try {
+          const status = await getRestrictionStatus(doc.senderId);
+          if (status.restricted) {
+            await messagesCol.deleteOne({ _id: doc._id });
+            io.to(`user-${doc.senderId}`).emit("chat_restricted", {
+              message: status.message,
+              restrictionType: status.restrictionType,
+              restrictionEndAt: status.restrictionEndAt,
+              permanent: status.permanent,
+            });
+            return;
+          }
+
+          if (!doc.receiverId || !doc.text) return;
+
+          // Push notification for the recipient — mobile chat is written
+          // directly into MongoDB by the Flutter client (no REST endpoint),
+          // so this change stream is the only place that can trigger it,
+          // same reasoning as the restriction guard above.
+          const senderObjectId = mongoose.Types.ObjectId.isValid(doc.senderId)
+            ? new mongoose.Types.ObjectId(doc.senderId)
+            : null;
+          const sender = senderObjectId
+            ? await mongoose.connection.db
+                .collection("users")
+                .findOne(
+                  { _id: senderObjectId },
+                  { projection: { name: 1, username: 1, email: 1 } },
+                )
+            : null;
+          const senderName =
+            sender?.name || sender?.username || sender?.email || "New message";
+
+          sendPushToUser(doc.receiverId, {
+            title: senderName,
+            body: doc.text.slice(0, 100),
+            url: "/chats",
+            tag: `chat-${doc._id}`,
+            // High priority (Android "high" / APNs priority 10) — chat push
+            // is the whole point of this watcher (delivery while the app is
+            // backgrounded or fully closed). Normal priority can be deferred
+            // by Android Doze/App Standby or delayed by APNs "consider
+            // power" scheduling when there's no running app to wake, which
+            // would defeat that.
+            urgent: true,
+            data: {
+              senderId: String(doc.senderId),
+              senderName: String(senderName),
+              senderUsername: String(sender?.username || sender?.email || ""),
+            },
+          }).catch((err) =>
+            console.error("[Push] Chat message push failed:", err.message),
+          );
+        } catch (err) {
+          console.error("[ChangeStream] messages restriction guard failed:", err.message);
+        }
+      });
+
+      messagesChangeStream.on("error", (err) =>
+        console.error("[ChangeStream] messages error:", err.message)
+      );
+
+      console.log("[ChangeStream] Watching messages for restricted senders");
+    } catch (err) {
+      console.error("[ChangeStream] Failed to start messages watcher:", err.message);
     }
 
     const PORT = process.env.PORT || 5000;
