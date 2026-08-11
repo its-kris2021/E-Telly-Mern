@@ -2,7 +2,12 @@ import express from "express";
 import EvacuationCenter from "../models/EvacuationCenter.js";
 import EvacuationLog from "../models/EvacuationLog.js";
 import User from "../models/user.js";
-import { protect, requireRole, rejectIfOutsideAssignedBarangay } from "../middleware/auth.js";
+import {
+  protect,
+  requireRole,
+  requireAssignedBarangayIfOfficial,
+  rejectIfOutsideAssignedBarangay,
+} from "../middleware/auth.js";
 import { BARANGAY_COORDS } from "../config/barangays.js";
 
 const router = express.Router();
@@ -645,9 +650,15 @@ async function resolveUserName(req) {
 }
 
 // ── GET /api/evacuation/centers?barangay=... ─────────────────────────────────
-router.get("/centers", protect, async (req, res) => {
+// Barangay Official is force-scoped to their own assignedBarangay — the
+// ?barangay= query param is ignored for that role so they can't view (or seed)
+// another barangay's centers just by changing the query string.
+router.get("/centers", protect, requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
-    const { barangay = "muntindilaw" } = req.query;
+    const barangay =
+      req.user.role === "barangay_official"
+        ? req.user.assignedBarangay
+        : req.query.barangay || "muntindilaw";
     if (barangay === "all") {
       const allBarangays = [...new Set(SEED.map((s) => s.barangay))];
       await Promise.all(allBarangays.map(seedIfEmpty));
@@ -731,41 +742,50 @@ router.put("/centers/:id/occupancy", protect, requireRole("cdrrmo"), async (req,
 });
 
 // ── PUT /api/evacuation/centers/:id/capacity ─────────────────────────────────
-router.put("/centers/:id/capacity", protect, requireRole("cdrrmo"), async (req, res) => {
-  try {
-    const userName = await resolveUserName(req);
-    const center = await EvacuationCenter.findById(req.params.id);
-    if (!center) return res.status(404).json({ message: "Center not found" });
-    if (rejectIfOutsideAssignedBarangay(req, res, center.barangay)) return;
+// Barangay Official may edit capacity for centers in their own barangay only
+// (rejectIfOutsideAssignedBarangay below) — it's the one field they're allowed
+// to modify; occupancy/reset/availability/create remain CDRRMO-only.
+router.put(
+  "/centers/:id/capacity",
+  protect,
+  requireRole("cdrrmo", "barangay_official"),
+  requireAssignedBarangayIfOfficial,
+  async (req, res) => {
+    try {
+      const userName = await resolveUserName(req);
+      const center = await EvacuationCenter.findById(req.params.id);
+      if (!center) return res.status(404).json({ message: "Center not found" });
+      if (rejectIfOutsideAssignedBarangay(req, res, center.barangay)) return;
 
-    const prev = center.capacity;
-    const next = Math.max(1, parseInt(req.body.capacity, 10));
-    if (isNaN(next))
-      return res.status(400).json({ message: "Invalid capacity value" });
+      const prev = center.capacity;
+      const next = Math.max(1, parseInt(req.body.capacity, 10));
+      if (isNaN(next))
+        return res.status(400).json({ message: "Invalid capacity value" });
 
-    center.capacity = next;
-    center.occupancy = Math.min(center.occupancy, next);
-    center.updatedBy = { userId: req.user.id, userName };
-    await center.save();
+      center.capacity = next;
+      center.occupancy = Math.min(center.occupancy, next);
+      center.updatedBy = { userId: req.user.id, userName };
+      await center.save();
 
-    const log = await EvacuationLog.create({
-      centerId: center._id,
-      centerName: center.name,
-      barangay: center.barangay,
-      action: "capacity_update",
-      previousValue: prev,
-      newValue: next,
-      delta: next - prev,
-      user: { id: req.user.id, name: userName },
-    });
+      const log = await EvacuationLog.create({
+        centerId: center._id,
+        centerName: center.name,
+        barangay: center.barangay,
+        action: "capacity_update",
+        previousValue: prev,
+        newValue: next,
+        delta: next - prev,
+        user: { id: req.user.id, name: userName },
+      });
 
-    req.app.get("io").emit("evacuation_updated", { center, log });
-    res.json({ center, log });
-  } catch (err) {
-    console.error("❌ Capacity update:", err.message);
-    res.status(500).json({ message: "Failed to update capacity" });
-  }
-});
+      req.app.get("io").emit("evacuation_updated", { center, log });
+      res.json({ center, log });
+    } catch (err) {
+      console.error("❌ Capacity update:", err.message);
+      res.status(500).json({ message: "Failed to update capacity" });
+    }
+  },
+);
 
 // ── POST /api/evacuation/centers/:id/reset ───────────────────────────────────
 router.post("/centers/:id/reset", protect, requireRole("cdrrmo"), async (req, res) => {
@@ -878,9 +898,13 @@ router.post("/centers", protect, requireRole("cdrrmo"), async (req, res) => {
 });
 
 // ── GET /api/evacuation/logs?barangay=...&limit=50 ───────────────────────────
-router.get("/logs", protect, async (req, res) => {
+// Same force-scoping as GET /centers — a Barangay Official can only ever see
+// their own barangay's activity log, regardless of the ?barangay= query param.
+router.get("/logs", protect, requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
-    const { barangay, limit = 50 } = req.query;
+    const { limit = 50 } = req.query;
+    const barangay =
+      req.user.role === "barangay_official" ? req.user.assignedBarangay : req.query.barangay;
     const query = barangay ? { barangay } : {};
     const logs = await EvacuationLog.find(query)
       .sort({ createdAt: -1 })

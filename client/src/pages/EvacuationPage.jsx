@@ -17,7 +17,7 @@ import ModalShell from "../components/ui/ModalShell";
 import { connectSocket } from "../utils/socket";
 import buildingImg from "../images/building.png";
 import LocationPicker from "../components/alerts/LocationPicker/LocationPicker";
-import { getUserRole } from "../config/roleModules";
+import { getUserRole, getAssignedBarangay } from "../config/roleModules";
 
 // ── Facility image map ────────────────────────────────────────────────────────
 const FACILITY_IMAGES = {
@@ -281,6 +281,7 @@ function EditModal({
   onSaveCapacity,
   onReset,
   onToggleAvailability,
+  capacityOnly = false,
 }) {
   const [cap, setCap] = useState(String(center.capacity));
   const [isAvail, setIsAvail] = useState(center.available !== false);
@@ -310,29 +311,33 @@ function EditModal({
         </div>
         <p className="text-sm text-gray-500 mb-5 leading-snug">{center.name}</p>
 
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-          Availability
-        </label>
-        <button
-          onClick={toggleAvailability}
-          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm font-semibold transition-colors mb-5
-            ${
-              isAvail
-                ? "bg-green-50 border-green-200 text-green-700"
-                : "bg-red-50 border-red-200 text-red-600"
-            }`}
-        >
-          <span>
-            {isAvail ? "Available — open to evacuees" : "Unavailable — closed"}
-          </span>
-          <div
-            className={`relative w-10 h-5 rounded-full transition-colors ${isAvail ? "bg-green-500" : "bg-red-400"}`}
-          >
-            <div
-              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${isAvail ? "left-5" : "left-0.5"}`}
-            />
-          </div>
-        </button>
+        {!capacityOnly && (
+          <>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Availability
+            </label>
+            <button
+              onClick={toggleAvailability}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm font-semibold transition-colors mb-5
+                ${
+                  isAvail
+                    ? "bg-green-50 border-green-200 text-green-700"
+                    : "bg-red-50 border-red-200 text-red-600"
+                }`}
+            >
+              <span>
+                {isAvail ? "Available — open to evacuees" : "Unavailable — closed"}
+              </span>
+              <div
+                className={`relative w-10 h-5 rounded-full transition-colors ${isAvail ? "bg-green-500" : "bg-red-400"}`}
+              >
+                <div
+                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${isAvail ? "left-5" : "left-0.5"}`}
+                />
+              </div>
+            </button>
+          </>
+        )}
 
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
           Total Capacity
@@ -355,13 +360,15 @@ function EditModal({
           >
             Save Changes
           </button>
-          <button
-            onClick={() => onReset(center._id)}
-            title="Reset occupancy to 0"
-            className="px-4 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
-          >
-            <RotateCcw size={13} /> Reset
-          </button>
+          {!capacityOnly && (
+            <button
+              onClick={() => onReset(center._id)}
+              title="Reset occupancy to 0"
+              className="px-4 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+            >
+              <RotateCcw size={13} /> Reset
+            </button>
+          )}
         </div>
       </div>
     </ModalShell>
@@ -487,7 +494,13 @@ function CreateModal({ currentBarangay, onClose, onCreate }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function EvacuationPage() {
-  const [barangay, setBarangay] = useState("muntindilaw");
+  // Barangay Official is locked to their own assignedBarangay — there is no
+  // barangay switcher for that role (server also force-scopes on this, see
+  // GET /api/evacuation/centers).
+  const isOfficial = getUserRole() === "barangay_official";
+  const [barangay, setBarangay] = useState(
+    isOfficial ? getAssignedBarangay() || "muntindilaw" : "muntindilaw",
+  );
   const [centers, setCenters] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -712,10 +725,12 @@ export default function EvacuationPage() {
     BARANGAYS.find((b) => b.value === barangay)?.label ?? barangay;
   const hotlines = BARANGAYS.find((b) => b.value === barangay)?.hotlines ?? [];
 
-  // Evacuation module is CDRRMO-only for editing; Barangay Official is view-only
-  // (occupancy/capacity/reset/availability controls, create, and the activity
-  // log are all hidden below and rejected server-side for non-CDRRMO roles).
+  // Evacuation module is CDRRMO-only for occupancy/reset/availability/create
+  // and the activity log. Barangay Official may additionally edit capacity
+  // only, for centers in their own (locked) barangay — enforced server-side
+  // by PUT /centers/:id/capacity.
   const isAdmin = getUserRole() === "cdrrmo";
+  const canEditCapacity = isAdmin || isOfficial;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -745,7 +760,12 @@ export default function EvacuationPage() {
             </div>
           )}
 
-          {/* Barangay selector */}
+          {/* Barangay selector — Barangay Official is locked to their own barangay */}
+          {isOfficial ? (
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm">
+              {brgyLabel}
+            </div>
+          ) : (
           <div className="relative">
             <button
               ref={brgyBtnRef}
@@ -799,6 +819,7 @@ export default function EvacuationPage() {
                 );
               })()}
           </div>
+          )}
         </div>
       </div>
 
@@ -935,7 +956,7 @@ export default function EvacuationPage() {
                             {s.label}
                           </span>
                         )}
-                        {isAdmin && (
+                        {canEditCapacity && (
                           <button
                             onClick={() => setEditId(c._id)}
                             disabled={isOffline}
@@ -1138,6 +1159,7 @@ export default function EvacuationPage() {
           onSaveCapacity={handleSaveCapacity}
           onReset={handleReset}
           onToggleAvailability={handleToggleAvailability}
+          capacityOnly={!isAdmin}
         />
       )}
 

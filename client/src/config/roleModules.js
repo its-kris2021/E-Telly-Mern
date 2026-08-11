@@ -67,6 +67,16 @@ export function getUserRole() {
   }
 }
 
+export function getAssignedBarangay() {
+  const stored = localStorage.getItem("user");
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored).assignedBarangay ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getHomePath(role) {
   return ROLE_HOME[role] || "/login";
 }
