@@ -20,6 +20,8 @@ import {
   computeStatus,
   applyManualRestriction,
   clearRestriction,
+  findProfileWithExpiryApplied,
+  findProfilesWithExpiryApplied,
 } from "../services/chatRestrictionService.js";
 
 const router = express.Router();
@@ -108,7 +110,7 @@ router.get("/cases", async (req, res) => {
     ]);
 
     const userIds = cases.map(reportedUserObjectId).filter(Boolean);
-    const profiles = await ChatUserModerationProfile.find({ userId: { $in: userIds } }).lean();
+    const profiles = await findProfilesWithExpiryApplied(userIds);
     const profileByUserId = new Map(profiles.map((p) => [String(p.userId), p]));
 
     res.json({
@@ -137,7 +139,7 @@ router.get("/cases/:messageId", async (req, res) => {
     if (rejectIfOutsideAssignedBarangay(req, res, caseDoc.reportedUserBarangayKey)) return;
 
     const profile = reportedUserObjectId(caseDoc)
-      ? await ChatUserModerationProfile.findOne({ userId: reportedUserObjectId(caseDoc) }).lean()
+      ? await findProfileWithExpiryApplied(reportedUserObjectId(caseDoc))
       : null;
 
     const isSystemAdmin = req.user.role === "system_admin";
@@ -440,7 +442,7 @@ router.get("/users/:userId/summary", async (req, res) => {
       { totalCases: 0, totalReports: 0, byStatus: {}, byReason: {} },
     );
 
-    const profile = await ChatUserModerationProfile.findOne({ userId: reportedUserId }).lean();
+    const profile = await findProfileWithExpiryApplied(reportedUserId);
 
     res.json({
       success: true,

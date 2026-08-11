@@ -45,6 +45,26 @@ export async function findProfile(userId) {
   return ChatUserModerationProfile.findOne({ userId });
 }
 
+// Read paths that display restriction state to staff (case list, case
+// detail, user violation summary) must not trust the raw stored fields —
+// without this, an expired temporary restriction keeps showing as "active"
+// in the admin UI until the resident happens to hit /status or send a
+// message, since those are the only paths that otherwise apply refreshExpiry.
+// These wrap findProfile/find with the same lazy-expiry-then-persist logic.
+export async function findProfileWithExpiryApplied(userId) {
+  const profile = await findProfile(userId);
+  if (!profile) return null;
+  if (refreshExpiry(profile)) await profile.save();
+  return profile;
+}
+
+export async function findProfilesWithExpiryApplied(userIds) {
+  if (!userIds.length) return [];
+  const profiles = await ChatUserModerationProfile.find({ userId: { $in: userIds } });
+  await Promise.all(profiles.filter((p) => refreshExpiry(p)).map((p) => p.save()));
+  return profiles;
+}
+
 // Lazily clears an expired temporary restriction so access is regained
 // automatically without any admin action. Mutates `profile` in place and
 // returns true if it changed something the caller must persist — this

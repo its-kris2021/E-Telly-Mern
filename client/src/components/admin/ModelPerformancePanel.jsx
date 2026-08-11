@@ -110,8 +110,8 @@ function HazardSection({ hazardType, data }) {
   );
 }
 
-export default function ModelPerformancePanel() {
-  const [open, setOpen] = useState(false);
+export default function ModelPerformancePanel({ defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

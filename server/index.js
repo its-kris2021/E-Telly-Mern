@@ -138,8 +138,8 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// GET all reports — CDRRMO (city-wide) / Barangay Official (own barangay only)
-app.get("/api/reports", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
+// GET all reports — System Admin/CDRRMO (city-wide) / Barangay Official (own barangay only)
+app.get("/api/reports", protect, requireRole("system_admin", "cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1)
       return res.status(500).json({ success: false, error: "Database not connected" });
@@ -187,7 +187,7 @@ app.post("/api/notify-emergency", protect, requireRole("cdrrmo", "barangay_offic
 });
 
 // Update report status
-app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
+app.post("/api/reports/update-status", protect, requireRole("system_admin", "cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     const { reportId, status, adminNotes } = req.body;
 
@@ -280,7 +280,7 @@ app.post("/api/reports/update-status", protect, requireRole("cdrrmo", "barangay_
 });
 
 // Resolve report
-app.post("/api/reports/resolve", protect, requireRole("cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
+app.post("/api/reports/resolve", protect, requireRole("system_admin", "cdrrmo", "barangay_official"), requireAssignedBarangayIfOfficial, async (req, res) => {
   try {
     const { reportId, resolutionNotes } = req.body;
 

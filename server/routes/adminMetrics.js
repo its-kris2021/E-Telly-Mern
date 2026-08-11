@@ -11,7 +11,7 @@ import { protect, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.get("/model-metrics", protect, requireRole("cdrrmo", "barangay_official"), async (req, res) => {
+router.get("/model-metrics", protect, requireRole("system_admin", "cdrrmo", "barangay_official"), async (req, res) => {
   try {
     const [floodVersions, landslideVersions] = await Promise.all([
       RiskModel.find({ hazardType: "flood" }).sort({ version: -1 }).limit(20).lean(),

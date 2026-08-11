@@ -6,17 +6,17 @@ import InstallPrompt from "./components/pwa/InstallPrompt";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import DashboardPage from "./pages/DashboardPage";
 import AlertsPage from "./pages/AlertsPage";
 import HazardMapPage from "./pages/HazardMapPage";
 import EvacuationPage from "./pages/EvacuationPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 import ReportsPage from "./pages/ReportPage";
-import SystemSettingsPage from "./pages/SystemSettingsPage";
-import FamilyMembersPage from "./pages/FamilyMembersPage";
 import SafetyTipsPage from "./pages/SafetyTipsPage";
 import SafetyTipDetailPage from "./pages/SafetyTipDetailPage";
 import ChatMonitoringPage from "./pages/ChatMonitoringPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
+import ModelPerformancePage from "./pages/ModelPerformancePage";
 import { getUserRole, getHomePath, ROLE_HOME, ROLE_NAV_ITEMS } from "./config/roleModules";
 
 function clearSession() {
@@ -195,6 +195,10 @@ export default function App() {
 
         {/* Protected pages — disaster-response ops (CDRRMO + Barangay Official) */}
         <Route
+          path="/dashboard"
+          element={<ProtectedLayout Page={DashboardPage} roles={rolesFor("/dashboard")} />}
+        />
+        <Route
           path="/alerts"
           element={<ProtectedLayout Page={AlertsPage} roles={rolesFor("/alerts")} />}
         />
@@ -209,10 +213,6 @@ export default function App() {
         <Route
           path="/evacuation"
           element={<ProtectedLayout Page={EvacuationPage} roles={rolesFor("/evacuation")} />}
-        />
-        <Route
-          path="/family-members"
-          element={<ProtectedLayout Page={FamilyMembersPage} roles={rolesFor("/family-members")} />}
         />
         <Route
           path="/safety-tips"
@@ -234,12 +234,12 @@ export default function App() {
           element={<ProtectedLayout Page={ManageUsersPage} roles={rolesFor("/manage-users")} />}
         />
         <Route
-          path="/system-settings"
-          element={<ProtectedLayout Page={SystemSettingsPage} roles={rolesFor("/system-settings")} />}
-        />
-        <Route
           path="/audit-logs"
           element={<ProtectedLayout Page={AuditLogsPage} roles={rolesFor("/audit-logs")} />}
+        />
+        <Route
+          path="/model-performance"
+          element={<ProtectedLayout Page={ModelPerformancePage} roles={rolesFor("/model-performance")} />}
         />
 
         {/* Catch-all */}

@@ -7,11 +7,11 @@ import {
   Map,
   MapPin,
   Users,
-  UserRound,
-  Settings,
   BookOpen,
   ShieldAlert,
   History,
+  Sparkles,
+  LayoutDashboard,
 } from "lucide-react";
 
 export const ROLE_LABELS = {
@@ -24,37 +24,36 @@ export const ROLE_LABELS = {
 // Where each role lands after login / when hitting an unauthorized route.
 export const ROLE_HOME = {
   system_admin: "/manage-users",
-  cdrrmo: "/alerts",
-  barangay_official: "/reports",
+  cdrrmo: "/dashboard",
+  barangay_official: "/dashboard",
 };
 
 export const ROLE_NAV_ITEMS = {
   // System Admin is web-platform/account-management only — zero disaster-ops
-  // access, except Chat Monitoring (full reporter-identity visibility there).
+  // access.
   system_admin: [
-    { icon: Users, label: "Manage Users", href: "/manage-users" },
+    { icon: Users, label: "User Management", href: "/manage-users" },
     { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
     { icon: History, label: "Audit Logs", href: "/audit-logs" },
-    { icon: Settings, label: "System Settings", href: "/system-settings" },
+    { icon: Sparkles, label: "AI Model Performance", href: "/model-performance" },
   ],
   // CDRRMO — full city-wide disaster-ops access (all barangays).
   cdrrmo: [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Bell, label: "Alerts", href: "/alerts" },
     { icon: Volume2, label: "Reports", href: "/reports" },
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
-    { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
     { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
   ],
   // Barangay Official — scoped to their assigned barangay only (enforced server-side).
   barangay_official: [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+    { icon: Bell, label: "Alerts", href: "/alerts" },
     { icon: Volume2, label: "Reports", href: "/reports" },
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
-    { icon: Bell, label: "Alerts", href: "/alerts" },
-    { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
     { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
-    { icon: UserRound, label: "Family Members", href: "/family-members" },
   ],
 };
 
