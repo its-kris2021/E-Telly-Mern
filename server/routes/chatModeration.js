@@ -12,6 +12,7 @@ import ChatUserModerationProfile from "../models/ChatUserModerationProfile.js";
 import MessageReport from "../models/MessageReport.js";
 import User from "../models/user.js";
 import { resolveBarangayKey } from "../config/barangays.js";
+import { sendPushToUser } from "./push.js";
 import {
   getOrCreateProfile,
   refreshExpiry,
@@ -357,6 +358,33 @@ router.post("/cases/:messageId/warn", async (req, res) => {
 
     await profile.save();
     await caseDoc.save();
+
+    // Notify everyone who reported this message that their report was
+    // confirmed and acted on — reporters otherwise have no way to know
+    // moderation happened.
+    MessageReport.find({ messageId: caseDoc.messageId }).select("reporterId").lean()
+      .then((reports) => Promise.allSettled(
+        reports.map((r) => sendPushToUser(r.reporterId, {
+          title: "Report reviewed",
+          body: "Thanks for the report — we reviewed the message and took action.",
+          url: "/chats",
+          tag: `chat-report-${caseDoc._id}`,
+        })),
+      ))
+      .catch((err) => console.error("[ChatModeration] reporter notification failed:", err.message));
+
+    // Notify the reported user they've been warned — otherwise the only way
+    // they'd find out is by hitting a restriction while trying to send.
+    const warnedBody = restrictionJustApplied
+      ? `Your message was found to violate community guidelines (warning #${profile.warningCount}). Chat access is restricted for ${tier.label}.`
+      : `Your message was found to violate community guidelines (warning #${profile.warningCount}). Further violations may restrict your chat access.`;
+    sendPushToUser(userId, {
+      title: "Chat warning issued",
+      body: warnedBody,
+      url: "/chats",
+      tag: `chat-warning-${caseDoc._id}`,
+      urgent: restrictionJustApplied,
+    }).catch((err) => console.error("[ChatModeration] warned-user notification failed:", err.message));
 
     res.json({
       success: true,
