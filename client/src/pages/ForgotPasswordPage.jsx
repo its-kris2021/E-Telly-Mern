@@ -1,7 +1,39 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Phone, Mail, ArrowLeft, KeyRound } from "lucide-react";
 
+const SYSTEM_ADMIN_EMAIL = "rafael@etelly.com";
+
 export default function ForgotPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const email = (searchParams.get("email") || "").trim().toLowerCase();
+  const isSystemAdmin = email === SYSTEM_ADMIN_EMAIL;
+
+  const description = isSystemAdmin
+    ? "As the System Administrator, you're the one who resets passwords for everyone else — there's no administrator above your account to do it for you. Recovery has to be done directly by E-Telly technical support."
+    : "The System Administrator can reset it for you. Once reset, you will be given a temporary password and prompted to create a new one.";
+
+  const steps = isSystemAdmin
+    ? [
+        "Contact E-Telly technical support",
+        "Verify your identity as the System Administrator",
+        "They will manually reset your password on the server",
+        "Log in and set your own strong password",
+      ]
+    : [
+        "Contact the System Administrator",
+        "Ask them to reset your account password",
+        "They will give you a temporary password",
+        "Log in and set your own strong password",
+      ];
+
+  const contactLabel = isSystemAdmin
+    ? "Contact technical support"
+    : "Contact System Administrator";
+
+  const officeLabel = "System Admin";
+  const phone = "+63 917 000 0000";
+  const contactEmail = "rafael@etelly.com";
+
   return (
     <div className="min-h-screen relative flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-gray-900" />
@@ -17,8 +49,7 @@ export default function ForgotPasswordPage() {
             Forgot your password?
           </h2>
           <p className="text-gray-500 mt-2 text-sm leading-relaxed">
-            Your administrator can reset it for you. Once reset, you will be
-            given a temporary password and prompted to create a new one.
+            {description}
           </p>
         </div>
 
@@ -28,12 +59,7 @@ export default function ForgotPasswordPage() {
             How it works
           </p>
           <ol className="space-y-2">
-            {[
-              "Contact your CDRRMO administrator",
-              "Ask them to reset your account password",
-              "They will give you a temporary password",
-              "Log in and set your own strong password",
-            ].map((step, i) => (
+            {steps.map((step, i) => (
               <li
                 key={i}
                 className="flex items-start gap-3 text-sm text-amber-700"
@@ -50,17 +76,15 @@ export default function ForgotPasswordPage() {
         {/* Contact info */}
         <div className="space-y-3 mb-8">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            Contact administrator
+            {contactLabel}
           </p>
           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
             <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
               <Phone size={15} className="text-red-600" />
             </div>
             <div>
-              <p className="text-xs text-gray-400">CDRRMO Office</p>
-              <p className="text-sm font-semibold text-gray-900">
-                +63 917 854 0842{" "}
-              </p>
+              <p className="text-xs text-gray-400">{officeLabel}</p>
+              <p className="text-sm font-semibold text-gray-900">{phone}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -70,7 +94,7 @@ export default function ForgotPasswordPage() {
             <div>
               <p className="text-xs text-gray-400">Email</p>
               <p className="text-sm font-semibold text-gray-900">
-                cdrrmoantipolocity1@gmail.com
+                {contactEmail}
               </p>
             </div>
           </div>

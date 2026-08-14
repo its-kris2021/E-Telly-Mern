@@ -169,7 +169,7 @@ export default function LoginPage() {
             {/* Forgot password */}
             <div className="text-right">
               <Link
-                to="/forgot-password"
+                to={`/forgot-password${loginEmail ? `?email=${encodeURIComponent(loginEmail)}` : ""}`}
                 className="text-sm text-red-600 hover:text-red-700 font-medium"
               >
                 Forgot password?
