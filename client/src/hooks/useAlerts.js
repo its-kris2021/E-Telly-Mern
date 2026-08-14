@@ -4,7 +4,6 @@ import { connectSocket } from "../utils/socket";
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
   : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
-const POLL_INTERVAL = 60_000;
 const REFRESH_COOLDOWN = 10; // seconds — anti-spam only, not rate-limiting
 
 // rescue type always sorts first, then by severity
@@ -151,7 +150,6 @@ export function useAlerts() {
   const [isStale,      setIsStale]      = useState(false);
   const [lastFetched,  setLastFetched]  = useState(null);
   const [cooldownSecs, setCooldownSecs] = useState(0);
-  const timerRef    = useRef(null);
   const cooldownRef = useRef(null);
 
   function sortAlerts(raw) {
@@ -202,24 +200,33 @@ export function useAlerts() {
     });
 
     fetchAlerts();
-    timerRef.current = setInterval(fetchAlerts, POLL_INTERVAL);
 
-    // Real-time: socket events update instantly without waiting for the next poll
+    // Real-time: socket events update instantly, no polling needed
     const socket = connectSocket();
     socket.on("new_alert",     fetchAlerts);
     socket.on("alert_updated", fetchAlerts);
 
-    // Reconnect: refresh immediately when coming back online
+    // Catch-up fetch: "connect" fires on the initial connection AND on every
+    // reconnect, so this is how we pick up any new_alert/alert_updated
+    // events that were emitted while the socket was disconnected.
+    socket.on("connect", fetchAlerts);
+    // Mark stale immediately on disconnect so the UI reflects the gap
+    // while the socket works on reconnecting.
+    const handleDisconnect = () => setIsStale(true);
+    socket.on("disconnect", handleDisconnect);
+
+    // Browser network recovery can precede/outlast the socket's own
+    // reconnect handshake, so also catch up there.
     const handleOnline  = () => fetchAlerts();
-    // Mark stale immediately on disconnect so the UI doesn't wait up to 60s
     const handleOffline = () => setIsStale(true);
     window.addEventListener("online",  handleOnline);
     window.addEventListener("offline", handleOffline);
 
     return () => {
-      clearInterval(timerRef.current);
       socket.off("new_alert",     fetchAlerts);
       socket.off("alert_updated", fetchAlerts);
+      socket.off("connect",       fetchAlerts);
+      socket.off("disconnect",    handleDisconnect);
       window.removeEventListener("online",  handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
@@ -244,10 +251,6 @@ export function useAlerts() {
     if (cooldownSecs > 0) return;
     setLoading(true);
     fetchAlerts();
-
-    // Reset the poll timer so the next auto-poll is a full 60s from now
-    clearInterval(timerRef.current);
-    timerRef.current = setInterval(fetchAlerts, POLL_INTERVAL);
 
     // Short anti-spam cooldown
     clearInterval(cooldownRef.current);

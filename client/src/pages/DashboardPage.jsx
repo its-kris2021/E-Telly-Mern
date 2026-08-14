@@ -137,6 +137,10 @@ export default function DashboardPage() {
   );
   const recentAlerts = alerts.slice(0, 5);
   const recentPending = pendingReports.slice(0, 4);
+  const newAlertsToday = alerts.filter((a) => {
+    if (!a.createdAt) return false;
+    return new Date(a.createdAt).toDateString() === new Date().toDateString();
+  }).length;
 
   return (
     <div>
@@ -166,7 +170,12 @@ export default function DashboardPage() {
               {counts.total}
             </p>
           )}
-          <p className="text-[10px] sm:text-xs text-gray-400 mt-2 sm:mt-3">Refreshes every 60s</p>
+          {newAlertsToday > 0 && (
+            <p className="text-[10px] sm:text-xs text-blue-600 mt-2 sm:mt-3 flex items-center gap-1">
+              <TrendingUp size={13} />
+              {newAlertsToday} new today
+            </p>
+          )}
         </div>
 
         {/* Pending Reports */}
