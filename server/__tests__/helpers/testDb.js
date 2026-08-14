@@ -15,6 +15,10 @@ export async function stopTestDb() {
 }
 
 export async function clearTestDb() {
-  const { collections } = mongoose.connection;
-  await Promise.all(Object.values(collections).map((c) => c.deleteMany({})));
+  // Uses the native driver's collection list, not mongoose.connection.collections
+  // — the latter only tracks collections touched through a Mongoose model, so
+  // raw mongoose.connection.db.collection("...") writes (e.g. emergency_reports,
+  // inserted directly in several tests) would otherwise survive between tests.
+  const collections = await mongoose.connection.db.collections();
+  await Promise.all(collections.map((c) => c.deleteMany({})));
 }

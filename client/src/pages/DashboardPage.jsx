@@ -6,17 +6,14 @@ import {
   MapPin,
   Volume2,
   InfoIcon,
-  HandHelpingIcon,
   ShieldCheck,
   Clock,
-  ClipboardList,
   ArrowRight,
   TrendingUp,
 } from "lucide-react";
 import DashboardCard from "../components/admin/DashboardCard";
 import { useAlerts } from "../hooks/useAlerts";
 import { timeAgo } from "../utils/timeHelpers";
-import { useCommunitySharing } from "../hooks/useCommunitySharing";
 import { connectSocket } from "../utils/socket";
 
 const API_BASE = import.meta.env.PROD
@@ -51,13 +48,6 @@ const modules = [
     icon: MapPin,
     href: "/evacuation",
     color: "bg-green-500",
-  },
-  {
-    title: "Community Sharing",
-    description: "Manage community resource sharing",
-    icon: HandHelpingIcon,
-    href: "/community-sharing",
-    color: "bg-purple-600",
   },
   {
     title: "Safety Tips",
@@ -110,7 +100,6 @@ function AllClearState({ label }) {
 
 export default function DashboardPage() {
   const { alerts, loading: alertsLoading, counts } = useAlerts();
-  const { requests, reqLoading } = useCommunitySharing();
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
 
@@ -148,7 +137,6 @@ export default function DashboardPage() {
   );
   const recentAlerts = alerts.slice(0, 5);
   const recentPending = pendingReports.slice(0, 4);
-  const pendingRequestsCount = requests.filter((r) => r.status === "pending").length;
 
   return (
     <div>
@@ -162,7 +150,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5 mb-6">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 mb-6">
         {/* Active Alerts */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
@@ -179,28 +167,6 @@ export default function DashboardPage() {
             </p>
           )}
           <p className="text-[10px] sm:text-xs text-gray-400 mt-2 sm:mt-3">Refreshes every 60s</p>
-        </div>
-
-        {/* Pending Community Requests */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-gray-400">
-              Pending Requests
-            </p>
-            <ClipboardList size={16} className="text-gray-300" />
-          </div>
-          {reqLoading ? (
-            <div className="h-8 w-10 bg-gray-100 rounded animate-pulse" />
-          ) : (
-            <p
-              className={`text-2xl sm:text-4xl font-bold font-mono ${
-                pendingRequestsCount > 0 ? "text-amber-600" : "text-gray-900"
-              }`}
-            >
-              {pendingRequestsCount}
-            </p>
-          )}
-          <p className="text-[10px] sm:text-xs text-gray-400 mt-2 sm:mt-3">Community resource requests</p>
         </div>
 
         {/* Pending Reports */}

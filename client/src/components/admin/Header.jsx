@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { User, LogOut } from "lucide-react";
+import { User, LogOut, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import NotificationToggle from "../pwa/NotificationToggle";
-import { ROLE_LABELS, getUserRole } from "../../config/roleModules";
+import { ROLE_LABELS, getUserRole, getAssignedBarangay } from "../../config/roleModules";
+import { barangayLabel } from "../../config/barangays";
 
 export default function Header({ userEmail = "", onLogout }) {
   const navigate = useNavigate();
@@ -10,6 +11,8 @@ export default function Header({ userEmail = "", onLogout }) {
 
   const userRole = getUserRole();
   const roleLabel = ROLE_LABELS[userRole] || "User";
+  const assignedBarangay = getAssignedBarangay();
+  const barangayName = assignedBarangay ? barangayLabel(assignedBarangay) : null;
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -30,6 +33,13 @@ export default function Header({ userEmail = "", onLogout }) {
 
           <div className="flex items-center gap-4">
             <NotificationToggle />
+
+            {barangayName && (
+              <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                <MapPin size={12} />
+                Brgy. {barangayName}
+              </span>
+            )}
 
             {/* User info */}
             <div className="flex items-center gap-3">

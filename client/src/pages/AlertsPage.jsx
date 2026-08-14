@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { Plus, RefreshCw, ClipboardList, ChevronDown, ChevronUp, WifiOff } from "lucide-react";
+import { useState } from "react";
+import { Plus, RefreshCw, WifiOff } from "lucide-react";
 import { useAlerts } from "../hooks/useAlerts";
 import { useOfflineAlertQueue } from "../hooks/useOfflineAlertQueue";
 import { timeAgo } from "../utils/timeHelpers";
@@ -9,21 +9,6 @@ import CreateAlertModal from "../components/alerts/CreateAlertModal";
 import DismissConfirmModal from "../components/alerts/DismissConfirmModal";
 import ModelPerformancePanel from "../components/admin/ModelPerformancePanel";
 import { getUserRole } from "../config/roleModules";
-
-const API_BASE = import.meta.env.PROD
-  ? window.location.origin
-  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
-
-function fmtTime(ts) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString("en-PH", {
-    timeZone: "Asia/Manila",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function AlertsPage() {
   const { alerts, loading, error, isStale, lastFetched, dismiss, refresh, cooldownSecs, counts } =
@@ -39,19 +24,6 @@ export default function AlertsPage() {
   const [showModal,      setShowModal]      = useState(false);
   const [activeFilter,   setActiveFilter]   = useState("all");
   const [pendingDismiss, setPendingDismiss] = useState(null);
-  const [logs,           setLogs]           = useState([]);
-  const [logsOpen,       setLogsOpen]       = useState(false);
-
-  const fetchLogs = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/alerts/log`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setLogs(data.entries ?? []);
-    } catch {
-      // non-critical
-    }
-  }, []);
 
   const filtered =
     activeFilter === "all"     ? alerts :
@@ -62,13 +34,11 @@ export default function AlertsPage() {
     if (pendingDismiss) {
       dismiss(pendingDismiss._id);
       setPendingDismiss(null);
-      fetchLogs();
     }
   };
 
   const handleCreated = () => {
     refresh();
-    fetchLogs();
   };
 
   return (
@@ -191,64 +161,6 @@ export default function AlertsPage() {
         onDismissRequest={setPendingDismiss}
         onRetry={refresh}
       />
-
-      {/* Activity log panel — admin only */}
-      {isAdmin && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <button
-          onClick={() => {
-            if (!logsOpen) fetchLogs();
-            setLogsOpen((o) => !o);
-          }}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <ClipboardList size={15} className="text-gray-400" />
-            Activity Log
-            {logs.length > 0 && (
-              <span className="bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">
-                {logs.length}
-              </span>
-            )}
-          </div>
-          {logsOpen
-            ? <ChevronUp size={15} className="text-gray-400" />
-            : <ChevronDown size={15} className="text-gray-400" />}
-        </button>
-
-        {logsOpen && (
-          <div className="border-t border-gray-100 divide-y divide-gray-50 max-h-80 overflow-y-auto">
-            {logs.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">
-                No activity recorded yet.
-              </p>
-            ) : (
-              logs.map((entry) => (
-                <div key={entry._id} className="px-4 py-2.5 flex items-start gap-3">
-                  <div className="w-7 h-7 bg-red-50 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-[10px] font-bold text-red-500">
-                      {(entry.by ?? "?").charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-700">
-                      <span className="font-semibold">{entry.by}</span>{" "}
-                      <span className="text-gray-500">
-                        {entry.action === "created" ? "created" : "dismissed"}
-                      </span>{" "}
-                      <span className="text-gray-600 italic truncate">
-                        "{entry.alertTitle}"
-                      </span>
-                    </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {fmtTime(entry.at)}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>}
 
       {/* AI model performance — admin only */}
       {isAdmin && <ModelPerformancePanel />}
