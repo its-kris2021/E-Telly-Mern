@@ -44,7 +44,6 @@ export const BARANGAY_LABELS = {
   mambugan:     "Mambugan",
   mayamot:      "Mayamot",
   muntindilaw:  "Muntindilaw",
-  private:      "Private Subdivision",
   sanisidro:    "San Isidro",
   sanjose:      "San Jose",
   sanjuan:      "San Juan",

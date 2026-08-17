@@ -431,7 +431,7 @@ function CreateModal({ currentBarangay, onClose, onCreate }) {
         {err && <p className="text-xs text-red-600 mb-3">{err}</p>}
 
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Name
+          Name <span className="text-red-500">*</span>
         </label>
         <input
           value={name}
@@ -448,6 +448,7 @@ function CreateModal({ currentBarangay, onClose, onCreate }) {
               setLat(lt);
               setLng(lg);
             }}
+            required
           />
         </div>
 
