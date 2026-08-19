@@ -1,5 +1,7 @@
+import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
 import { sendNotificationToAll } from "../routes/push.js";
+import { signAlert } from "./alertSigning.js";
 
 export function toDateKey() {
   const d = new Date();
@@ -32,11 +34,35 @@ const SEVERITY_PREFIX = {
 };
 
 export async function upsertAlert({ _dedupeKey, source, ...alertData }) {
+  // Signing needs the alert's final _id and createdAt, which for an
+  // upsert normally aren't known until after the write (a brand-new _id
+  // is assigned by MongoDB on insert). Look up whether this is an update
+  // or a genuine insert first so signAlert() can be called with the real
+  // values before the write happens, exactly like the pre-generated-_id
+  // pattern used in routes/alerts.js and index.js's Alert.create() calls.
+  const existing = await Alert.findOne(
+    { _dedupeKey, isActive: true },
+    { _id: 1, createdAt: 1 },
+  );
+  const _id = existing?._id ?? new mongoose.Types.ObjectId();
+  const createdAt = existing?.createdAt ?? new Date();
+  const updatedAt = new Date();
+
+  const signed = signAlert({ ...alertData, source, _id, createdAt, isActive: true });
+
   const result = await Alert.updateOne(
     { _dedupeKey, isActive: true },
     {
-      $set: { ...alertData, source, _dedupeKey, updatedAt: new Date() },
-      $setOnInsert: { createdAt: new Date(), isActive: true },
+      $set: {
+        ...alertData,
+        source,
+        _dedupeKey,
+        updatedAt,
+        ...(signed ? { signature: signed.signature, keyId: signed.keyId } : {}),
+      },
+      // _id must only ever be set on insert — MongoDB rejects changing an
+      // existing document's _id via $set.
+      $setOnInsert: { _id, createdAt, isActive: true },
     },
     // setDefaultsOnInsert ensures schema defaults (e.g. Alert.confirmedOutcome
     // = "unconfirmed") are actually applied on a brand-new upsert — a raw

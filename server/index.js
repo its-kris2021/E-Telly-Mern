@@ -24,6 +24,7 @@ import auditLogRoutes from "./routes/auditLogs.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import Alert from "./models/Alert.js";
+import { signAlert } from "./services/alertSigning.js";
 import { getRestrictionStatus } from "./services/chatRestrictionService.js";
 import { protect, requireRole, requireAssignedBarangayIfOfficial, scopeToAssignedBarangay, rejectIfOutsideAssignedBarangay } from "./middleware/auth.js";
 import rateLimit from "express-rate-limit";
@@ -245,17 +246,31 @@ app.post("/api/reports/update-status", protect, requireRole("system_admin", "cdr
         const typeName = report.emergencyType?.charAt(0).toUpperCase() + report.emergencyType?.slice(1) || "Emergency";
         const VALID_TYPES = ["fire","flood","rainfall","earthquake","lahar","typhoon","storm","landslide","rescue","other"];
         const alertType = VALID_TYPES.includes(report.emergencyType) ? report.emergencyType : "other";
-        const savedAlert = await Alert.create({
+        // _id/createdAt/isActive are set explicitly (rather than left to
+        // schema defaults) because signAlert() needs their final values
+        // before the document is inserted — see the same pattern in
+        // routes/alerts.js's POST handler.
+        const alertFields = {
+          _id: new mongoose.Types.ObjectId(),
           type: alertType,
           title: `Community Report: ${typeName}`,
           description: report.description || "Emergency report approved by CDRRMO",
           severity: alertSeverity,
           location: report.location?.exactAddress || (typeof report.location === "string" ? report.location : "") || "Unknown location",
+          barangays: [],
           source: "residents",
           linkedReportId: new mongoose.Types.ObjectId(reportId),
           lat: report.latitude ?? null,
           lng: report.longitude ?? null,
+          isActive: true,
+          createdAt: new Date(),
           // No expiresAt — community report alerts must be resolved/dismissed manually
+        };
+        const signed = signAlert(alertFields);
+
+        const savedAlert = await Alert.create({
+          ...alertFields,
+          ...(signed ? { signature: signed.signature, keyId: signed.keyId } : {}),
         });
         io.emit("new_alert", savedAlert.toObject());
 

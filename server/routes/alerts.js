@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
 import { protect, requireRole } from "../middleware/auth.js";
 import { sendNotificationToAll } from "./push.js";
+import { signAlert } from "../services/alertSigning.js";
 
 const router = express.Router();
 
@@ -80,7 +81,13 @@ router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req
     const effectiveBarangays =
       req.user.role === "barangay_official" ? [req.user.assignedBarangay] : (barangays ?? []);
 
-    const alert = await Alert.create({
+    // _id is pre-generated (rather than left to Alert.create) because the
+    // signature is computed over the alert's id along with its other
+    // fields — signing has to happen before/at insert, not after, so the
+    // very first version of the document that ever exists is already the
+    // signed one.
+    const alertFields = {
+      _id: new mongoose.Types.ObjectId(),
       source:   source ?? "CDRRMO",
       type:     type ?? "other",
       severity: effectiveSeverity,
@@ -92,9 +99,16 @@ router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req
       lng:      lng ?? null,
       isManual,
       isActive: true,
+      createdAt: new Date(),
       // Manual alerts never expire — they must be dismissed/resolved manually
       ...(isManual ? {} : { expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000) }),
       actionLog: [{ action: "created", by: req.user.name ?? req.user.email ?? "admin" }],
+    };
+    const signed = signAlert(alertFields);
+
+    const alert = await Alert.create({
+      ...alertFields,
+      ...(signed ? { signature: signed.signature, keyId: signed.keyId } : {}),
     });
 
     // Emit socket + push notification to all subscribers

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import "leaflet/dist/leaflet.css";
+import "../utils/fixLeafletIcons";
 import { useMap } from "react-leaflet";
 import {
   Crosshair,

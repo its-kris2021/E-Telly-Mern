@@ -1,22 +1,22 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import AdminLayout from "./layouts/AdminLayout";
 import InstallPrompt from "./components/pwa/InstallPrompt";
 
-import LoginPage from "./pages/LoginPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ChangePasswordPage from "./pages/ChangePasswordPage";
-import DashboardPage from "./pages/DashboardPage";
-import AlertsPage from "./pages/AlertsPage";
-import HazardMapPage from "./pages/HazardMapPage";
-import EvacuationPage from "./pages/EvacuationPage";
-import ManageUsersPage from "./pages/ManageUsersPage";
-import ReportsPage from "./pages/ReportPage";
-import SafetyTipsPage from "./pages/SafetyTipsPage";
-import SafetyTipDetailPage from "./pages/SafetyTipDetailPage";
-import ChatMonitoringPage from "./pages/ChatMonitoringPage";
-import AuditLogsPage from "./pages/AuditLogsPage";
-import ModelPerformancePage from "./pages/ModelPerformancePage";
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
+const ChangePasswordPage = lazy(() => import("./pages/ChangePasswordPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const AlertsPage = lazy(() => import("./pages/AlertsPage"));
+const HazardMapPage = lazy(() => import("./pages/HazardMapPage"));
+const EvacuationPage = lazy(() => import("./pages/EvacuationPage"));
+const ManageUsersPage = lazy(() => import("./pages/ManageUsersPage"));
+const ReportsPage = lazy(() => import("./pages/ReportPage"));
+const SafetyTipsPage = lazy(() => import("./pages/SafetyTipsPage"));
+const SafetyTipDetailPage = lazy(() => import("./pages/SafetyTipDetailPage"));
+const ChatMonitoringPage = lazy(() => import("./pages/ChatMonitoringPage"));
+const AuditLogsPage = lazy(() => import("./pages/AuditLogsPage"));
+const ModelPerformancePage = lazy(() => import("./pages/ModelPerformancePage"));
 import { getUserRole, getHomePath, ROLE_HOME, ROLE_NAV_ITEMS } from "./config/roleModules";
 
 function clearSession() {
@@ -164,6 +164,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <InstallPrompt />
+      <Suspense fallback={<div className="p-6 text-slate-600">Loading...</div>}>
       <Routes>
         {/* Root → login, or the caller's role home if already authenticated */}
         <Route
@@ -245,6 +246,7 @@ export default function App() {
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

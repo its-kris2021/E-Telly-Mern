@@ -61,6 +61,16 @@ const AlertSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   expiresAt: Date,
+
+  // Ed25519 signature over this alert's canonical fields (see
+  // services/alertSigning.js), verified client-side by the mobile app
+  // before it trusts/relays an alert received over its offline P2P mesh
+  // instead of straight from this server. Null for an alert created before
+  // signing was deployed, or if ALERT_SIGNING_PRIVATE_KEY isn't configured
+  // on this instance — such alerts still display normally, they just can't
+  // be gossiped phone-to-phone.
+  signature: { type: String, default: null },
+  keyId: { type: Number, default: null },
 });
 
 export default mongoose.model("Alert", AlertSchema);
