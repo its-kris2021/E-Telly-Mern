@@ -35,6 +35,27 @@ const app = express();
 const server = createServer(app);
 const isLocalMode = process.env.LOCAL_MODE === "true";
 
+// Security headers for browser responses. HSTS is production-only because it
+// would make local HTTP development inconvenient after a browser caches it.
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains"
+    );
+  }
+
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader(
+    "Permissions-Policy",
+    "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+  );
+
+  next();
+});
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:4173",
