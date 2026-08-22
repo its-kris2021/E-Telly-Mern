@@ -1,11 +1,12 @@
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
+import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { dirname, join, sep } from "path";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
 import hazardRoutes from "./routes/hazard.js";
@@ -34,6 +35,11 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 const isLocalMode = process.env.LOCAL_MODE === "true";
+
+// Gzip/brotli-eligible compression for every response (JSON API replies and
+// the built client bundle alike) — Heroku's router doesn't compress on our
+// behalf, so without this the ~250KB JS bundle ships byte-for-byte uncompressed.
+app.use(compression());
 
 // Security headers for browser responses. HSTS is production-only because it
 // would make local HTTP development inconvenient after a browser caches it.
@@ -386,7 +392,22 @@ app.post("/api/reports/resolve", protect, requireRole("system_admin", "cdrrmo", 
 if (process.env.NODE_ENV === "production") {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
-  app.use(express.static(join(__dirname, "../client/dist")));
+  app.use(
+    express.static(join(__dirname, "../client/dist"), {
+      setHeaders: (res, filePath) => {
+        // Vite content-hashes everything under /assets, so those files never
+        // change under a given URL — safe to cache for a year. Everything
+        // else (index.html, sw.js, registerSW.js, manifest) is an entry point
+        // that *references* those hashes and must be revalidated on every
+        // load, or clients would keep pointing at a stale bundle after deploy.
+        if (filePath.includes(`${sep}assets${sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+        }
+      },
+    }),
+  );
   app.get(/(.*)/, (req, res) => {
     res.sendFile(join(__dirname, "../client/dist", "index.html"));
   });
