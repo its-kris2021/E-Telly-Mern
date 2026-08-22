@@ -864,7 +864,7 @@ export default function EvacuationPage() {
             key={s.label}
             className="bg-white rounded-xl border border-gray-200 px-4 py-3"
           >
-            <p className="text-xs text-gray-400 font-medium">{s.label}</p>
+            <p className="text-xs text-gray-500 font-medium">{s.label}</p>
             <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -880,7 +880,7 @@ export default function EvacuationPage() {
             </p>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {hotlines.map((h) => (
-                <span key={h} className="text-xs font-medium text-red-600">
+                <span key={h} className="text-xs font-medium text-red-700">
                   {h}
                 </span>
               ))}
@@ -891,7 +891,7 @@ export default function EvacuationPage() {
 
       {/* Loading / Error */}
       {loading && (
-        <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+        <div className="flex items-center justify-center gap-2 py-16 text-gray-500">
           <Loader2 size={20} className="animate-spin" />
           <span className="text-sm">Loading centers…</span>
         </div>
@@ -940,10 +940,10 @@ export default function EvacuationPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-0.5">
                       <div className="min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-900 leading-snug">
+                        <h2 className="text-sm font-semibold text-gray-900 leading-snug">
                           {c.name}
-                        </h3>
-                        <p className="text-xs text-gray-400">{c.location}</p>
+                        </h2>
+                        <p className="text-xs text-gray-500">{c.location}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {unavailable ? (
@@ -971,7 +971,7 @@ export default function EvacuationPage() {
 
                     <div className="mt-2.5 mb-2">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] text-gray-400">
+                        <span className="text-[10px] text-gray-500">
                           Occupancy
                         </span>
                         <span className="text-[10px] text-gray-500 font-semibold">
@@ -989,7 +989,7 @@ export default function EvacuationPage() {
                     <div className="flex items-center justify-between flex-wrap gap-y-1">
                       <div className="flex items-center gap-1.5">
                         <Users size={12} className="text-gray-400 shrink-0" />
-                        <span className="text-xs text-gray-400">Evacuees:</span>
+                        <span className="text-xs text-gray-500">Evacuees:</span>
 
                         {isAdmin ? (
                           <>
@@ -1050,7 +1050,7 @@ export default function EvacuationPage() {
                               </button>
                             )}
 
-                            <span className="text-xs text-gray-400 font-medium">
+                            <span className="text-xs text-gray-500 font-medium">
                               / {c.capacity}
                             </span>
 
@@ -1065,14 +1065,14 @@ export default function EvacuationPage() {
                         ) : (
                           <span className="text-sm font-bold text-gray-800">
                             {c.occupancy}{" "}
-                            <span className="text-xs text-gray-400 font-medium">
+                            <span className="text-xs text-gray-500 font-medium">
                               / {c.capacity}
                             </span>
                           </span>
                         )}
                       </div>
 
-                      <span className="text-[10px] text-gray-400">
+                      <span className="text-[10px] text-gray-500">
                         {c.updatedAt
                           ? `Updated ${fmtTime(c.updatedAt)}`
                           : "Not yet updated"}
@@ -1112,7 +1112,7 @@ export default function EvacuationPage() {
           {logsOpen && (
             <div className="border-t border-gray-100 divide-y divide-gray-50 max-h-80 overflow-y-auto">
               {logs.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">
+                <p className="text-sm text-gray-500 text-center py-6">
                   No activity recorded yet.
                 </p>
               ) : (
@@ -1139,7 +1139,7 @@ export default function EvacuationPage() {
                             </span>
                           )}
                         </p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
+                        <p className="text-[10px] text-gray-500 mt-0.5">
                           {fmtTime(log.createdAt)}
                         </p>
                       </div>
