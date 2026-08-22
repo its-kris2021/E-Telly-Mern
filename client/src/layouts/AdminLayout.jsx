@@ -11,7 +11,11 @@ export default function AdminLayout({ children, userEmail, onLogout }) {
       {/* Main content — offset by sidebar width on large screens */}
       <div className="flex flex-col flex-1 lg:ml-64 min-h-screen overflow-x-hidden">
         <Header userEmail={userEmail} onLogout={onLogout} />
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto">{children}</main>
+        {/* scrollbar-gutter reserves the scrollbar's width up front, so
+            pages that start short (e.g. a loading spinner) and then grow
+            tall once data arrives don't cause a horizontal layout shift
+            when the scrollbar appears. */}
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto [scrollbar-gutter:stable]">{children}</main>
       </div>
     </div>
   );
