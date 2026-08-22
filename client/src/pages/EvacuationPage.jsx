@@ -921,7 +921,7 @@ export default function EvacuationPage() {
                 className={`rounded-xl border transition-all p-4
                   ${
                     unavailable
-                      ? "bg-gray-50 border-gray-200 opacity-70"
+                      ? "bg-gray-50 border-gray-200"
                       : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm"
                   }`}
               >
