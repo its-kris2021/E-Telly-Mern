@@ -10,7 +10,7 @@ export default defineConfig({
       strategies: "injectManifest",
       srcDir: "src",
       filename: "sw.js",
-      includeAssets: ["icons/icon.png"],
+      includeAssets: ["icons/icon.png", "icons/icon-192.png"],
       manifest: {
         name: "E-Telly: Disaster Preparedness & Resource Sharing",
         short_name: "E-Telly",
@@ -23,7 +23,7 @@ export default defineConfig({
         background_color: "#1e293b",
         icons: [
           {
-            src: "/icons/icon.png",
+            src: "/icons/icon-192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
