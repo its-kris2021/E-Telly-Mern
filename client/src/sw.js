@@ -66,6 +66,20 @@ self.addEventListener("notificationclick", (event) => {
       })
     );
 
+    // Hazard overlay WMS tiles (flood: LIPAD/UP DREAM, landslide: Phil
+    // Geoportal). Unlike the basemap above, these weren't cached at all, so
+    // every pan/zoom re-fetched from two external gov/university servers.
+    // The underlying hazard datasets (25yr flood return period, landslide
+    // susceptibility) are static, not live forecasts, so a week-long cache
+    // is safe — same lifetime as the basemap tiles.
+    registerRoute(
+      /^https:\/\/(lipad-fmc\.dream\.upd\.edu\.ph|geoserver\.geoportal\.gov\.ph)\/geoserver\/wms/,
+      new StaleWhileRevalidate({
+        cacheName: "hazard-wms-tiles",
+        plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+      })
+    );
+
     registerRoute(
       /nominatim\.openstreetmap\.org/,
       new NetworkFirst({
