@@ -24,7 +24,7 @@ export default function FilterTabs({ activeFilter, onFilterChange, counts }) {
                   ? tab.key === "rescue"
                     ? "bg-red-600 text-white shadow-sm"
                     : "bg-gray-900 text-white shadow-sm"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-700"
               }
             `}
           >

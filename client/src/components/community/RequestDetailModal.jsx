@@ -389,7 +389,7 @@ export default function RequestDetailModal({ req, onClose, onRefresh }) {
 
         {isTerminal && (
           <div className={`w-full text-center py-2 rounded-lg text-sm font-medium ${
-            req.status === "fulfilled" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-500"
+            req.status === "fulfilled" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"
           }`}>
             This request has been {req.status}
           </div>

@@ -382,8 +382,8 @@ export default function ReportsPage() {
               <span
                 className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                   activeTab === tab.key
-                    ? "bg-red-100 text-red-600"
-                    : "bg-gray-100 text-gray-500"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-gray-100 text-gray-600"
                 }`}
               >
                 {tabCount[tab.key]}

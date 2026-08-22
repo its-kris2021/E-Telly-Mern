@@ -195,7 +195,7 @@ function statusOf(occupancy, capacity) {
   if (capacity <= 0)
     return {
       label: "Unknown",
-      badge: "bg-gray-100 text-gray-500",
+      badge: "bg-gray-100 text-gray-600",
       bar: "bg-gray-300",
     };
   const p = occupancy / capacity;
@@ -947,7 +947,7 @@ export default function EvacuationPage() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {unavailable ? (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                             Unavailable
                           </span>
                         ) : (
@@ -1097,7 +1097,7 @@ export default function EvacuationPage() {
               <ClipboardList size={15} className="text-gray-400" />
               Activity Log
               {logs.length > 0 && (
-                <span className="bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">
+                <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
                   {logs.length}
                 </span>
               )}

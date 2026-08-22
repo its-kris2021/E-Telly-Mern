@@ -48,7 +48,7 @@ export default function Sidebar() {
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="lg:hidden p-1 rounded-md hover:bg-gray-100 text-gray-500 mt-0.5"
+              className="lg:hidden p-1 rounded-md hover:bg-gray-100 text-gray-600 mt-0.5"
             >
               <ChevronLeft size={20} />
             </button>
