@@ -11,7 +11,10 @@ const FloodHazardLayer = ({ visible }) => {
       // Antipolo City, Rizal — 25-year return period
       // Layer code: ph045802000 = Antipolo City PSA code
       layers="geonode:ph045802000_fh25yr_10m"
-      format="image/png"
+      // png8 (8-bit indexed) instead of full 24/32-bit png: this layer is a
+      // flat-color hazard overlay, so palette reduction is lossless-looking
+      // but cuts each tile ~60% (verified against this GeoServer instance).
+      format="image/png8"
       transparent={true}
       opacity={0.75}
       version="1.1.1"

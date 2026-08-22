@@ -11,7 +11,10 @@ export const LandslideHazardLayer = ({ visible }) => {
     <WMSTileLayer
       url={PHIL_GEOPORTAL_WMS_URL}
       layers="landslide10ksusceptibility"
-      format="image/png"
+      // png8 (8-bit indexed) instead of full 24/32-bit png: this layer is a
+      // flat-color hazard overlay, so palette reduction is lossless-looking
+      // but cuts each tile ~75% (verified against this GeoServer instance).
+      format="image/png8"
       transparent={true}
       opacity={0.4}
       version="1.1.1"

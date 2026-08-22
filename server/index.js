@@ -396,12 +396,16 @@ if (process.env.NODE_ENV === "production") {
     express.static(join(__dirname, "../client/dist"), {
       setHeaders: (res, filePath) => {
         // Vite content-hashes everything under /assets, so those files never
-        // change under a given URL — safe to cache for a year. Everything
-        // else (index.html, sw.js, registerSW.js, manifest) is an entry point
-        // that *references* those hashes and must be revalidated on every
-        // load, or clients would keep pointing at a stale bundle after deploy.
+        // change under a given URL — safe to cache for a year. index.html,
+        // sw.js, registerSW.js, and manifest.webmanifest are entry points
+        // that *reference* those hashes and must be revalidated on every
+        // load, or clients would keep pointing at a stale bundle after
+        // deploy. /icons isn't hashed either, but it changes rarely enough
+        // (app icon) that a short reusable cache still beats max-age=0.
         if (filePath.includes(`${sep}assets${sep}`)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (filePath.includes(`${sep}icons${sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=86400");
         } else {
           res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
         }
