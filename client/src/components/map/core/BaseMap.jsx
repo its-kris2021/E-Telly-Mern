@@ -7,12 +7,16 @@ import {
 
 const TILES = {
   light: {
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    // No {r} (retina) token: Leaflet's getTileUrl() swaps it for "@2x" on any
+    // high-DPI screen regardless of detectRetina, but detectRetina isn't set
+    // here — so the tile grid stays standard-resolution and we'd just be
+    // downloading a 512x512 image to fill a ~256px slot for no visual gain.
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
   },
   dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
   },
