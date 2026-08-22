@@ -93,7 +93,7 @@ function AllClearState({ label }) {
   return (
     <div className="px-6 py-10 text-center">
       <ShieldCheck size={26} className="text-green-400 mx-auto mb-2" />
-      <p className="text-sm text-gray-400">{label}</p>
+      <p className="text-sm text-gray-500">{label}</p>
     </div>
   );
 }
@@ -158,7 +158,7 @@ export default function DashboardPage() {
         {/* Active Alerts */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-gray-400">
+            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-gray-500">
               Active Alerts
             </p>
             <Bell size={16} className="text-gray-300" />
@@ -181,7 +181,7 @@ export default function DashboardPage() {
         {/* Pending Reports */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-gray-400">
+            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-gray-500">
               Pending Reports
             </p>
             <Clock size={16} className="text-gray-300" />
@@ -197,7 +197,7 @@ export default function DashboardPage() {
               {pendingReports.length}
             </p>
           )}
-          <p className="text-[10px] sm:text-xs text-gray-400 mt-2 sm:mt-3">
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-2 sm:mt-3">
             {pendingReports.length > 0 ? "Awaiting review" : "Nothing pending"}
           </p>
         </div>
@@ -213,7 +213,7 @@ export default function DashboardPage() {
             </h2>
             <Link
               to="/alerts"
-              className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
             >
               View all <ArrowRight size={13} />
             </Link>
@@ -245,7 +245,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-gray-800 truncate leading-snug">
                         {alert.title}
                       </p>
-                      <p className="text-[11px] text-gray-400 mt-0.5 font-mono capitalize">
+                      <p className="text-[11px] text-gray-500 mt-0.5 font-mono capitalize">
                         {alert.type} · {timeAgo(alert.updatedAt ?? alert.createdAt)}
                       </p>
                     </div>
@@ -264,7 +264,7 @@ export default function DashboardPage() {
             </h2>
             <Link
               to="/reports"
-              className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
             >
               View all <ArrowRight size={13} />
             </Link>
@@ -299,7 +299,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-gray-800 truncate leading-snug">
                         {location}
                       </p>
-                      <p className="text-[11px] text-gray-400 mt-0.5 font-mono flex items-center gap-1">
+                      <p className="text-[11px] text-gray-500 mt-0.5 font-mono flex items-center gap-1">
                         {reporter} · {timeAgo(report.timestamp)}
                         {new Date(report.timestamp).toDateString() === new Date().toDateString() && (
                           <TrendingUp size={11} className="text-blue-400" />
@@ -316,7 +316,7 @@ export default function DashboardPage() {
 
       {/* Quick Access */}
       <div>
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500 mb-4">
           Quick Access
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
