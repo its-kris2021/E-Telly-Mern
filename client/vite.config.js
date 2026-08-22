@@ -11,6 +11,33 @@ export default defineConfig({
       srcDir: "src",
       filename: "sw.js",
       includeAssets: ["icons/icon.png", "icons/icon-192.png"],
+      injectManifest: {
+        // Default globPatterns (**/*.{js,css,html}) precaches every lazy
+        // route chunk on first install — ~14 pages' worth of JS/CSS
+        // downloaded up front, competing with the current page's own
+        // requests for HTTP/1.1's 6-connections-per-host limit. Excluding
+        // per-route chunks keeps the app shell (main bundle, vendor-icons,
+        // shared components) precached for instant offline boot, while each
+        // page is instead cached at runtime the first time it's actually
+        // visited (see the StaleWhileRevalidate route in src/sw.js).
+        globIgnores: [
+          "assets/LoginPage-*",
+          "assets/ForgotPasswordPage-*",
+          "assets/ChangePasswordPage-*",
+          "assets/DashboardPage-*",
+          "assets/AlertsPage-*",
+          "assets/HazardMapPage-*",
+          "assets/EvacuationPage-*",
+          "assets/ManageUsersPage-*",
+          "assets/ReportPage-*",
+          "assets/SafetyTipsPage-*",
+          "assets/SafetyTipDetailPage-*",
+          "assets/ChatMonitoringPage-*",
+          "assets/AuditLogsPage-*",
+          "assets/ModelPerformancePage-*",
+          "assets/ModelPerformancePanel-*",
+        ],
+      },
       manifest: {
         name: "E-Telly: Disaster Preparedness & Resource Sharing",
         short_name: "E-Telly",

@@ -80,6 +80,16 @@ self.addEventListener("notificationclick", (event) => {
       })
     );
 
+    // Per-route page chunks are deliberately excluded from the precache
+    // manifest (see injectManifest.globIgnores in vite.config.js) so they
+    // don't all download on first install. This picks them up instead the
+    // first time each page is actually visited, so offline support still
+    // builds up progressively rather than being lost.
+    registerRoute(
+      /\/assets\/.*\.(js|css)$/,
+      new StaleWhileRevalidate({ cacheName: "route-chunks" })
+    );
+
     registerRoute(
       /nominatim\.openstreetmap\.org/,
       new NetworkFirst({
