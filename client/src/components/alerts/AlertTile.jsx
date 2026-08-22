@@ -28,9 +28,9 @@ export default function AlertTile({ alert, onDismissRequest }) {
       {/* Title + severity badge + dismiss */}
       <div className="flex items-start justify-between gap-2 mb-0.5">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 leading-snug">{alert.title}</h3>
+          <h2 className="text-sm font-semibold text-gray-900 leading-snug">{alert.title}</h2>
           {alert.location && (
-            <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+            <p className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
               <MapPin size={10} className="text-gray-300 flex-shrink-0" />
               <span className="truncate max-w-[200px]">{alert.location}</span>
             </p>
@@ -67,11 +67,11 @@ export default function AlertTile({ alert, onDismissRequest }) {
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${src.bg} ${src.text} ${src.border}`}>
             {src.label}
           </span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 capitalize">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">
             {alert.type}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono shrink-0">
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-mono shrink-0">
           <Clock size={10} className="text-gray-300 flex-shrink-0" />
           <span>{timeAgo(alert.updatedAt ?? alert.createdAt)}</span>
           {until && until !== "expired" && (

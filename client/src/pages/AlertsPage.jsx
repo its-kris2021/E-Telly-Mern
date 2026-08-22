@@ -51,7 +51,7 @@ export default function AlertsPage() {
             Antipolo City — Hazard &amp; Evacuation Operations
           </p>
           {lastFetched && (
-            <p className="text-xs text-gray-400 mt-0.5 font-mono">
+            <p className="text-xs text-gray-500 mt-0.5 font-mono">
               Last updated at{" "}
               {new Date(lastFetched).toLocaleTimeString("en-PH", {
                 timeZone: "Asia/Manila",
@@ -138,9 +138,9 @@ export default function AlertsPage() {
           },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-            <p className="text-xs text-gray-400 font-medium">{s.label}</p>
+            <p className="text-xs text-gray-500 font-medium">{s.label}</p>
             <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>{s.value}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{s.sub}</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">{s.sub}</p>
           </div>
         ))}
       </div>
