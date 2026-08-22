@@ -57,6 +57,7 @@ export default function InstallPrompt() {
         </button>
         <button
           onClick={() => setVisible(false)}
+          aria-label="Dismiss install prompt"
           className="flex-shrink-0 text-slate-400 hover:text-white transition-colors"
         >
           <X size={15} />

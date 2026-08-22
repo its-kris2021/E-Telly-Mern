@@ -17,6 +17,7 @@ export default function Sidebar() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
+          aria-label="Open menu"
           className="lg:hidden fixed top-4 left-4 z-[1300] p-2 rounded-md bg-white shadow-lg"
         >
           <Menu size={24} />
@@ -48,6 +49,7 @@ export default function Sidebar() {
             </div>
             <button
               onClick={() => setIsOpen(false)}
+              aria-label="Close menu"
               className="lg:hidden p-1 rounded-md hover:bg-gray-100 text-gray-600 mt-0.5"
             >
               <ChevronLeft size={20} />
