@@ -114,7 +114,7 @@ export default function AuditLogsPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-16 text-gray-400 text-sm">Loading…</div>
+        <div className="text-center py-16 text-gray-500 text-sm">Loading…</div>
       ) : entries.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200 text-gray-500 text-sm">
           <History className="mx-auto mb-2 text-gray-300" size={28} />
@@ -167,7 +167,7 @@ export default function AuditLogsPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
                       {badge.label}
                     </span>
-                    <span className="text-xs text-gray-400">{formatDate(e.at)}</span>
+                    <span className="text-xs text-gray-500">{formatDate(e.at)}</span>
                   </div>
                   <p className="text-sm font-semibold text-gray-900 mt-2 capitalize">{actionLabel(e.action)}</p>
                   <p className="text-xs text-gray-500 mt-1">
@@ -180,7 +180,7 @@ export default function AuditLogsPage() {
           </div>
 
           <div className="flex items-center justify-between mt-4">
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-500">
               {total} entr{total === 1 ? "y" : "ies"}
             </span>
             {totalPages > 1 && (
