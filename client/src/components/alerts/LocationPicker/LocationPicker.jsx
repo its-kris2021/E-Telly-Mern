@@ -16,6 +16,7 @@ export default function LocationPicker({
   onLocationChange,
   onCoordinatesChange,
   required = false,
+  label = "Affected Location",
 }) {
   const [query,       setQuery]       = useState(location ?? "");
   const [suggestions, setSuggestions] = useState([]);
@@ -247,7 +248,7 @@ export default function LocationPicker({
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold text-gray-500 block">
-        Affected Location {required && <span className="text-red-500">*</span>}
+        {label} {required && <span className="text-red-500">*</span>}
       </label>
 
       {/* Search input with inline GPS button */}

@@ -443,6 +443,7 @@ function CreateModal({ currentBarangay, onClose, onCreate }) {
         <div className="mb-3">
           <LocationPicker
             location={location}
+            label="Location"
             onLocationChange={setLocation}
             onCoordinatesChange={(lt, lg) => {
               setLat(lt);

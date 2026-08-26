@@ -1,7 +1,7 @@
 import ReportTile from "../components/admin/ReportTile";
 import { useState, useEffect, useRef } from "react";
 import { connectSocket } from "../utils/socket";
-import { TrendingUp, Search, Download, Siren } from "lucide-react";
+import { TrendingUp, Search, Download, Siren, RefreshCw } from "lucide-react";
 import { barangayLabel } from "../config/barangays";
 
 const API_BASE = import.meta.env.PROD
@@ -36,6 +36,7 @@ export default function ReportsPage() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const hasLoaded = useRef(false);
 
   const showToast = (msg, type = "success") => {
@@ -316,9 +317,15 @@ export default function ReportsPage() {
           <p className="text-gray-600 mt-1 text-sm">Active disaster emergency reports</p>
         </div>
         <button
-          onClick={fetchReports}
-          className="mt-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm shrink-0"
+          onClick={async () => {
+            setRefreshing(true);
+            await fetchReports();
+            setRefreshing(false);
+          }}
+          disabled={refreshing}
+          className="mt-1 flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-sm shrink-0 disabled:opacity-60"
         >
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
