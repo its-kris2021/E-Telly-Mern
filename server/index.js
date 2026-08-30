@@ -67,14 +67,30 @@ const allowedOrigins = [
   "http://localhost:4173",
   "http://localhost:3000",
   /\.herokuapp\.com$/,
-  ...(isLocalMode ? [/^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/] : []),
+  /(^|\.)e-tellyph\.com$/,
+  ...(isLocalMode ? [/^192\.168\.\d+\.\d+$/] : []),
 ];
 
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
+    // Regex entries match against the parsed hostname, not the raw origin
+    // string — matching the scheme-prefixed string directly (e.g.
+    // "https://e-tellyph.com") meant the apex domain never matched
+    // /(^|\.)e-tellyph\.com$/ (nothing "." or "^"-anchored precedes it,
+    // "//" does), while "https://www.e-tellyph.com" only matched by
+    // accident because "www." happens to end in a dot. Since Vite emits
+    // <script type="module" crossorigin>, every asset request sends an
+    // Origin header even when same-origin, so this was rejecting the
+    // apex domain's JS/CSS with a bare 500 for every visitor.
+    let hostname;
+    try {
+      hostname = new URL(origin).hostname;
+    } catch {
+      return callback(new Error("Not allowed by CORS"), false);
+    }
     const allowed = allowedOrigins.some((o) =>
-      o instanceof RegExp ? o.test(origin) : o === origin
+      o instanceof RegExp ? o.test(hostname) : o === origin
     );
     callback(allowed ? null : new Error("Not allowed by CORS"), allowed);
   },
