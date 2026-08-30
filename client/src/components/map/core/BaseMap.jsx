@@ -1,9 +1,36 @@
+import { useEffect } from "react";
 import {
   MapContainer,
   TileLayer,
   ZoomControl,
   ScaleControl,
 } from "react-leaflet";
+
+// Preconnecting these globally (e.g. from index.html) would make every page
+// — including the login screen, which never touches a map — pay connection
+// setup for origins it doesn't use. Injecting them only while a map is
+// actually mounted keeps that cost off the critical path everywhere else.
+const TILE_ORIGINS = [
+  "https://a.basemaps.cartocdn.com",
+  "https://b.basemaps.cartocdn.com",
+  "https://c.basemaps.cartocdn.com",
+  "https://lipad-fmc.dream.upd.edu.ph",
+  "https://earthquake.usgs.gov",
+];
+
+function useMapPreconnects() {
+  useEffect(() => {
+    const links = TILE_ORIGINS.map((origin) => {
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = origin;
+      link.crossOrigin = "";
+      document.head.appendChild(link);
+      return link;
+    });
+    return () => links.forEach((link) => link.remove());
+  }, []);
+}
 
 const TILES = {
   light: {
@@ -38,6 +65,7 @@ const BaseMap = ({
   zoom = 13,
 }) => {
   const tile = TILES[tileVariant] ?? TILES.light;
+  useMapPreconnects();
 
   return (
     <MapContainer

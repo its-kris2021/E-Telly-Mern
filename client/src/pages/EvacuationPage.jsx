@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import ModalShell from "../components/ui/ModalShell";
 import { connectSocket } from "../utils/socket";
-import buildingImg from "../images/building.png";
+import buildingImg from "../images/building.webp";
 import LocationPicker from "../components/alerts/LocationPicker/LocationPicker";
 import { getUserRole, getAssignedBarangay } from "../config/roleModules";
 

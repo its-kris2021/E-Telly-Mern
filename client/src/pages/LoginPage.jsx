@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Shield } from "lucide-react";
-import antipoloImg from "../images/antipolo.jpg";
-import logoImg from "../images/logtell1.png";
+import antipoloImg from "../images/antipolo.webp";
+import logoImg from "../images/logtell1.webp";
 import { getHomePath } from "../config/roleModules";
 
 const API_BASE = import.meta.env.PROD

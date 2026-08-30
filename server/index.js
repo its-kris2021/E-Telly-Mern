@@ -421,7 +421,7 @@ if (process.env.NODE_ENV === "production") {
         if (filePath.includes(`${sep}assets${sep}`)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         } else if (filePath.includes(`${sep}icons${sep}`)) {
-          res.setHeader("Cache-Control", "public, max-age=86400");
+          res.setHeader("Cache-Control", "public, max-age=604800");
         } else {
           res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
         }
