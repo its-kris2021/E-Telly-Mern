@@ -11,9 +11,9 @@ import {
 // setup for origins it doesn't use. Injecting them only while a map is
 // actually mounted keeps that cost off the critical path everywhere else.
 const TILE_ORIGINS = [
-  "https://a.basemaps.cartocdn.com",
-  "https://b.basemaps.cartocdn.com",
-  "https://c.basemaps.cartocdn.com",
+  "https://a.tile.openstreetmap.org",
+  "https://b.tile.openstreetmap.org",
+  "https://c.tile.openstreetmap.org",
   "https://lipad-fmc.dream.upd.edu.ph",
   "https://earthquake.usgs.gov",
 ];
@@ -33,19 +33,19 @@ function useMapPreconnects() {
 }
 
 const TILES = {
+  // CARTO's basemaps.cartocdn.com XYZ tiles now require a registered API key
+  // for anonymous use — unauthenticated requests come back watermarked
+  // "API KEY REQUIRED" instead of the actual map. Standard OSM tiles need no
+  // key; "dark" reuses them with a CSS invert filter (see .dark-basemap-tiles
+  // in index.css) since OSM has no free keyless dark style.
   light: {
-    // No {r} (retina) token: Leaflet's getTileUrl() swaps it for "@2x" on any
-    // high-DPI screen regardless of detectRetina, but detectRetina isn't set
-    // here — so the tile grid stays standard-resolution and we'd just be
-    // downloading a 512x512 image to fill a ~256px slot for no visual gain.
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
   dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    className: "dark-basemap-tiles",
   },
 
   satellite: {
@@ -76,7 +76,16 @@ const BaseMap = ({
       zoomControl={false}
       className="w-full h-full"
     >
-      <TileLayer url={tile.url} attribution={tile.attribution} keepBuffer={2} />
+      <TileLayer
+        // keyed on variant: className isn't a prop react-leaflet hot-swaps on
+        // an existing layer (only url/opacity/zIndex are), so switching
+        // light -> dark needs a fresh TileLayer to pick up dark-basemap-tiles.
+        key={tileVariant}
+        url={tile.url}
+        attribution={tile.attribution}
+        className={tile.className}
+        keepBuffer={2}
+      />
       <ZoomControl position="topleft" />
       <ScaleControl position="bottomleft" imperial={false} />
       {children}

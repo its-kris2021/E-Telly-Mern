@@ -46,3 +46,8 @@ body {
   color: #94a3b8 !important;
   font-size: 10px !important;
 }
+/* OSM tiles have no native dark style, so the "dark" basemap variant inverts
+   the free light tiles instead of depending on a keyed provider. */
+.dark-basemap-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
