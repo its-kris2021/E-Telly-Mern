@@ -515,7 +515,23 @@ export default function EvacuationPage() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [brgyOpen, setBrgyOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [pendingIds, setPendingIds] = useState(() => new Set());
   const brgyBtnRef = useRef(null);
+
+  // Only one occupancy write per center may be in flight at a time — otherwise
+  // the real-time socket echo for an earlier click can arrive after a later
+  // click's optimistic update and briefly flash a stale number ("moving back
+  // and forth") before the correct value settles.
+  function markPending(id) {
+    setPendingIds((prev) => new Set(prev).add(id));
+  }
+  function clearPending(id) {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
 
   // ── Fetch centers + logs ────────────────────────────────────────────────────
   const fetchCenters = useCallback(async (brgy) => {
@@ -595,12 +611,13 @@ export default function EvacuationPage() {
 
   // ── Occupancy adjustment ────────────────────────────────────────────────────
   async function adjust(id, delta) {
-    if (isOffline) return;
+    if (isOffline || pendingIds.has(id)) return;
     const c = centers.find((x) => x._id === id);
     if (!c) return;
     const next = Math.max(0, Math.min(c.capacity, c.occupancy + delta));
     if (next === c.occupancy) return;
 
+    markPending(id);
     setCenters((prev) =>
       prev.map((x) => (x._id === id ? { ...x, occupancy: next } : x)),
     );
@@ -613,6 +630,8 @@ export default function EvacuationPage() {
       fetchLogs(barangay);
     } catch {
       fetchCenters(barangay);
+    } finally {
+      clearPending(id);
     }
   }
 
@@ -622,7 +641,7 @@ export default function EvacuationPage() {
   }
 
   async function commitInput(id) {
-    if (isOffline) {
+    if (isOffline || pendingIds.has(id)) {
       setInputId(null);
       setInputVal("");
       return;
@@ -632,6 +651,7 @@ export default function EvacuationPage() {
       const c = centers.find((x) => x._id === id);
       const next = c ? Math.max(0, Math.min(c.capacity, n)) : n;
 
+      markPending(id);
       setCenters((prev) =>
         prev.map((x) => (x._id === id ? { ...x, occupancy: next } : x)),
       );
@@ -644,6 +664,8 @@ export default function EvacuationPage() {
         fetchLogs(barangay);
       } catch {
         fetchCenters(barangay);
+      } finally {
+        clearPending(id);
       }
     }
     setInputId(null);
@@ -996,7 +1018,7 @@ export default function EvacuationPage() {
                           <>
                             <button
                               onClick={() => adjust(c._id, -1)}
-                              disabled={isOffline || c.occupancy <= 0}
+                              disabled={isOffline || c.occupancy <= 0 || pendingIds.has(c._id)}
                               className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
                             >
                               −
@@ -1039,7 +1061,7 @@ export default function EvacuationPage() {
                             ) : (
                               <button
                                 onClick={() => openInput(c._id, c.occupancy)}
-                                disabled={isOffline}
+                                disabled={isOffline || pendingIds.has(c._id)}
                                 title={
                                   isOffline
                                     ? "Editing disabled while offline"
@@ -1057,7 +1079,7 @@ export default function EvacuationPage() {
 
                             <button
                               onClick={() => adjust(c._id, +1)}
-                              disabled={isOffline || c.occupancy >= c.capacity}
+                              disabled={isOffline || c.occupancy >= c.capacity || pendingIds.has(c._id)}
                               className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
                             >
                               +
