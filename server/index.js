@@ -58,6 +58,27 @@ app.use((req, res, next) => {
     "Permissions-Policy",
     "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
   );
+  // Origins below are every third-party host the client actually loads from
+  // (map tiles/hazard data in src/components/map/**, the LocationPicker's
+  // CDN-loaded Leaflet, and OSM Nominatim geocoding) — add a host here
+  // before wiring up a new one client-side, or the browser will block it.
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' https://unpkg.com",
+      "style-src 'self' 'unsafe-inline' https://unpkg.com",
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.tile.opentopomap.org",
+      "connect-src 'self' https://nominatim.openstreetmap.org https://earthquake.usgs.gov https://lipad-fmc.dream.upd.edu.ph https://geoserver.geoportal.gov.ph https://geoportal.gov.ph https://www.gdacs.org https://bagong.pagasa.dost.gov.ph https://www.pagasa.dost.gov.ph",
+      "worker-src 'self'",
+      "manifest-src 'self'",
+      "font-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ")
+  );
 
   next();
 });
