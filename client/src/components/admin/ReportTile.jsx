@@ -5,6 +5,11 @@ import {
 } from "lucide-react";
 import ModalShell from "../ui/ModalShell";
 import { getUserRole } from "../../config/roleModules";
+import { timeAgo } from "../../utils/timeHelpers";
+
+// Pending reports newer than this are flagged "NEW" so CDRRMO/barangay staff
+// can spot fresh submissions at a glance without reading every timestamp.
+const NEW_REPORT_WINDOW_MS = 30 * 60 * 1000;
 
 export default function ReportTile({
   id,
@@ -15,6 +20,7 @@ export default function ReportTile({
   location,
   barangay,
   timestamp,
+  rawTimestamp,
   reportedBy,
   hasImage,
   imageUrl,
@@ -93,6 +99,12 @@ export default function ReportTile({
 
   const statusDisplay = getStatusDisplay();
 
+  const isNew =
+    currentStatus === "pending" &&
+    !!rawTimestamp &&
+    Date.now() - new Date(rawTimestamp).getTime() < NEW_REPORT_WINDOW_MS;
+  const relativeTime = rawTimestamp ? timeAgo(rawTimestamp) : "";
+
   const handleApprove = async (e) => {
     e.stopPropagation();
     if (!onApprove || currentStatus !== "pending") return;
@@ -155,6 +167,11 @@ export default function ReportTile({
                     <span className={`w-2 h-2 rounded-full shrink-0 ${statusDisplay.dot}`} />
                     <span className={`text-xs font-semibold ${statusDisplay.textClass}`}>{statusDisplay.text}</span>
                   </div>
+                  {isNew && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold tracking-wide animate-pulse shrink-0">
+                      NEW
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-gray-600 mt-1 line-clamp-2">{description}</p>
               </div>
@@ -177,7 +194,7 @@ export default function ReportTile({
                   Brgy. {barangay}
                 </span>
               )}
-              <span>{timestamp}</span>
+              <span title={timestamp}>{relativeTime || timestamp}</span>
               {rescue && (
                 <span className="flex items-center gap-1 text-red-600 font-medium">
                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
@@ -199,6 +216,11 @@ export default function ReportTile({
                 <div className="mt-2 flex items-center gap-1.5">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${statusDisplay.dot}`} />
                   <span className={`text-sm font-semibold ${statusDisplay.textClass}`}>{statusDisplay.text}</span>
+                  {isNew && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold tracking-wide">
+                      NEW
+                    </span>
+                  )}
                 </div>
               </div>
               <button
@@ -245,7 +267,10 @@ export default function ReportTile({
 
               <div>
                 <p className="text-sm font-medium text-gray-700">Reported At</p>
-                <p className="text-gray-900 text-sm mt-1">{timestamp}</p>
+                <p className="text-gray-900 text-sm mt-1">
+                  {timestamp}
+                  {relativeTime && <span className="text-gray-500"> · {relativeTime}</span>}
+                </p>
               </div>
 
               <div>

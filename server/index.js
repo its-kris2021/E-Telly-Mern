@@ -304,6 +304,31 @@ app.post("/api/reports/update-status", protect, requireRole("system_admin", "cdr
         ...(status === "approved" && report ? { report } : {}),
       });
 
+      // Reports don't store the reporter's User _id (only their email), so
+      // resolve it here — same pattern routes/reports.js uses when creating
+      // the report — to target the push at the one resident who filed it.
+      if (status === "approved" || status === "rejected") {
+        const reporterEmail = (existingReport.reporterEmail || existingReport.userData?.email || "").trim().toLowerCase();
+        if (reporterEmail) {
+          mongoose.connection.db.collection("users")
+            .findOne({ email: reporterEmail }, { projection: { _id: 1 } })
+            .then((reporterUser) => {
+              if (!reporterUser) return;
+              return sendPushToUser(reporterUser._id, {
+                title: status === "approved" ? "Report Approved" : "Report Rejected",
+                body: status === "approved"
+                  ? "Your emergency report has been reviewed and approved."
+                  : adminNotes
+                    ? `Your emergency report was not approved. Reason: ${adminNotes}`
+                    : "Your emergency report was reviewed and was not approved.",
+                url: "/reports",
+                tag: `report-status-${reportId}`,
+              });
+            })
+            .catch((err) => console.error("[Push] Reporter status notification failed:", err.message));
+        }
+      }
+
       if (status === "approved" && report) {
         const severityMap = { high: "critical", medium: "warning", low: "watch" };
         const alertSeverity = severityMap[report.severity?.toLowerCase()] || "warning";
@@ -414,6 +439,25 @@ app.post("/api/reports/resolve", protect, requireRole("system_admin", "cdrrmo", 
         }
       } catch (alertErr) {
         console.error("[Resolve] Failed to dismiss linked alert:", alertErr.message);
+      }
+
+      // Same reporterEmail -> User _id lookup used in the update-status route.
+      const reporterEmail = (existingReport.reporterEmail || existingReport.userData?.email || "").trim().toLowerCase();
+      if (reporterEmail) {
+        mongoose.connection.db.collection("users")
+          .findOne({ email: reporterEmail }, { projection: { _id: 1 } })
+          .then((reporterUser) => {
+            if (!reporterUser) return;
+            return sendPushToUser(reporterUser._id, {
+              title: "Report Resolved",
+              body: resolutionNotes
+                ? `Your emergency report has been marked resolved. Notes: ${resolutionNotes}`
+                : "Your emergency report has been marked resolved.",
+              url: "/reports",
+              tag: `report-status-${reportId}`,
+            });
+          })
+          .catch((err) => console.error("[Push] Reporter resolve notification failed:", err.message));
       }
 
       res.json({ success: true });

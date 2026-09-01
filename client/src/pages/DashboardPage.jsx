@@ -79,6 +79,9 @@ const ALERT_LABEL = {
   watch: "Watch",
 };
 
+// Matches the "NEW" threshold used on the full Reports page (ReportTile.jsx).
+const NEW_REPORT_WINDOW_MS = 30 * 60 * 1000;
+
 function SkeletonRow() {
   return (
     <div className="px-5 py-4 flex items-center gap-3 animate-pulse border-l-4 border-l-gray-100">
@@ -289,6 +292,9 @@ export default function DashboardPage() {
                   "Unknown location";
                 const reporter =
                   report.userData?.fullName || report.userName || "Anonymous";
+                const isNew =
+                  report.timestamp &&
+                  Date.now() - new Date(report.timestamp).getTime() < NEW_REPORT_WINDOW_MS;
                 return (
                   <div
                     key={report._id || report.id}
@@ -298,8 +304,13 @@ export default function DashboardPage() {
                       {type}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-800 truncate leading-snug">
-                        {location}
+                      <p className="text-sm font-medium text-gray-800 truncate leading-snug flex items-center gap-1.5">
+                        <span className="truncate">{location}</span>
+                        {isNew && (
+                          <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white tracking-wide animate-pulse">
+                            NEW
+                          </span>
+                        )}
                       </p>
                       <p className="text-[11px] text-gray-500 mt-0.5 font-mono flex items-center gap-1">
                         {reporter} · {timeAgo(report.timestamp)}
