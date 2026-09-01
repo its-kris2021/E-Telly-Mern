@@ -94,7 +94,7 @@ export default function ReportTile({
       return { dot: "bg-red-500",                   text: "Rejected", textClass: "text-red-600" };
     if (currentStatus === "resolved")
       return { dot: "bg-green-500",                 text: "Resolved", textClass: "text-green-600" };
-    return   { dot: "bg-orange-400 animate-pulse",  text: "Pending",  textClass: "text-orange-500" };
+    return   { dot: "bg-orange-400",  text: "Pending",  textClass: "text-orange-500" };
   };
 
   const statusDisplay = getStatusDisplay();
