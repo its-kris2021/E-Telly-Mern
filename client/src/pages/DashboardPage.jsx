@@ -307,7 +307,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-gray-800 truncate leading-snug flex items-center gap-1.5">
                         <span className="truncate">{location}</span>
                         {isNew && (
-                          <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white tracking-wide animate-pulse">
+                          <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white tracking-wide">
                             NEW
                           </span>
                         )}

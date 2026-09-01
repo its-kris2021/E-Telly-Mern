@@ -168,7 +168,7 @@ export default function ReportTile({
                     <span className={`text-xs font-semibold ${statusDisplay.textClass}`}>{statusDisplay.text}</span>
                   </div>
                   {isNew && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold tracking-wide animate-pulse shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold tracking-wide shrink-0">
                       NEW
                     </span>
                   )}
