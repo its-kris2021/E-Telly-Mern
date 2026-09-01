@@ -113,6 +113,10 @@ export async function buildTrainingSet(hazardType) {
       soilDeep: snap.soilDeep,
       barangayReportRate30d,
       susceptibility: susceptibilityFeature(snap.barangay),
+      windSpeed10m: snap.windSpeed10m,
+      surfacePressure: snap.surfacePressure,
+      et0_24h: snap.et0_24h,
+      riverDischarge: snap.riverDischarge,
     };
 
     rows.push({

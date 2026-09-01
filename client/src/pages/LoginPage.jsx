@@ -71,7 +71,7 @@ export default function LoginPage() {
         />
         <h1 className="text-5xl font-black tracking-tight mb-4">E-TELLY</h1>
         <p className="text-xl text-white/75 text-center max-w-sm leading-relaxed">
-        A SMART PROGRESSIVE WEB AND MOBILE APPLICATION FOR DISASTER PREPAREDNESS AND DISASTER COMMUNICATION SYSTEM  USING DECENTRALIZED NETWORK
+        A SMART PROGRESSIVE WEB AND MOBILE APPLICATION FOR DISASTER PREPAREDNESS AND  COMMUNICATION SYSTEM  USING DECENTRALIZED NETWORK
         </p>
         <div className="mt-12 flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-5 py-2.5 text-sm text-white/70">
           <Shield size={14} />

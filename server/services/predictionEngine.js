@@ -17,14 +17,19 @@ import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
 import RiskModel from "../models/RiskModel.js";
 import { BARANGAY_COORDS, barangayLabel } from "../config/barangays.js";
-import { fetchWeatherSnapshotBatch } from "./openMeteoCache.js";
-import { extractSnapshotFeatures } from "./weatherSnapshotService.js";
+import { fetchWeatherSnapshotBatch, fetchRiverDischargeBatch } from "./openMeteoCache.js";
+import { extractSnapshotFeatures, extractRiverDischargeFeature } from "./weatherSnapshotService.js";
 import { computeBarangayReportRate, susceptibilityFeature, toFeatureVector } from "./riskFeatures.js";
 import { applyStandardization, predictProba } from "./logisticRegression.js";
 import { toDateKey, upsertAiAlert } from "./alertHelpers.js";
 
 const HAZARD_TYPES = ["flood", "landslide"];
-const CONFIDENCE_THRESHOLD = 0.6;
+// Fallback only, for RiskModel docs trained before per-model calibrated
+// thresholds existed (see scripts/trainRiskModel.js operatingThreshold).
+// Flood/landslide positives are ~0.5%/0.3% of historical barangay-days, so a
+// fixed threshold this high would almost never fire — each model's own
+// F1-maximizing operatingThreshold is what actually gates alerts below.
+const DEFAULT_CONFIDENCE_THRESHOLD = 0.5;
 const SEVERITY_RANK = { watch: 1, warning: 2, critical: 3, evacuate: 4 };
 
 const BARANGAYS = Object.entries(BARANGAY_COORDS).map(([key, coord]) => ({ key, coord }));
@@ -37,9 +42,16 @@ async function loadActiveModels() {
   return models;
 }
 
-function severityFromProbability(prob) {
-  if (prob >= 0.85) return "critical";
-  if (prob >= 0.7)  return "warning";
+// Severity bands scaled relative to the model's own operating threshold,
+// not fixed absolute probabilities — with positives at ~0.5%/0.3% of rows,
+// probabilities in this model's real output range rarely approach 0.7/0.85,
+// so fixed bands would classify nearly every AI alert as "watch" regardless
+// of how confident the model actually is relative to its own calibration.
+// Splits the remaining headroom between threshold and 1.0 into thirds.
+function severityFromProbability(prob, threshold) {
+  const headroom = 1 - threshold;
+  if (prob >= threshold + headroom * 0.6) return "critical";
+  if (prob >= threshold + headroom * 0.3) return "warning";
   return "watch";
 }
 
@@ -53,11 +65,12 @@ async function ruleEngineAlreadyCovers(barangayKey, hazardType, minSeverityRank)
   return existing.some((a) => (SEVERITY_RANK[a.severity] ?? 0) >= minSeverityRank);
 }
 
-async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, barangayReportRate30d }) {
+async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, dischargeRaw, barangayReportRate30d }) {
   if (!model) return;
 
   const named = {
     ...extractSnapshotFeatures(weatherRaw),
+    riverDischarge: dischargeRaw ? extractRiverDischargeFeature(dischargeRaw) : 0,
     barangayReportRate30d,
     susceptibility: susceptibilityFeature(key),
   };
@@ -65,9 +78,10 @@ async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, 
   const standardized = applyStandardization(vector, model.featureMeans, model.featureStds);
   const probability = predictProba(standardized, model.weights, model.bias);
 
-  if (probability < CONFIDENCE_THRESHOLD) return;
+  const threshold = model.operatingThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
+  if (probability < threshold) return;
 
-  const severity = severityFromProbability(probability);
+  const severity = severityFromProbability(probability, threshold);
   if (await ruleEngineAlreadyCovers(key, hazardType, SEVERITY_RANK[severity])) return;
 
   const barangayName = barangayLabel(key);
@@ -101,7 +115,10 @@ export async function runPredictionChecks() {
     if (!models.flood && !models.landslide) return; // nothing trained yet
 
     const coordsList = BARANGAYS.map(({ coord }) => ({ lat: coord.lat, lon: coord.lng }));
-    const batch = await fetchWeatherSnapshotBatch(coordsList);
+    const [batch, dischargeBatch] = await Promise.all([
+      fetchWeatherSnapshotBatch(coordsList),
+      fetchRiverDischargeBatch(coordsList),
+    ]);
     if (!batch) return;
 
     const reportsCol = mongoose.connection.db.collection("emergency_reports");
@@ -109,6 +126,7 @@ export async function runPredictionChecks() {
     for (let i = 0; i < BARANGAYS.length; i++) {
       const { key, coord } = BARANGAYS[i];
       const weatherRaw = batch.data[i];
+      const dischargeRaw = dischargeBatch?.data[i];
 
       // Hazard-agnostic — computed once per barangay per cycle, not once per
       // (barangay, hazardType), since the feature value is the same either way.
@@ -117,7 +135,7 @@ export async function runPredictionChecks() {
       for (const hazardType of HAZARD_TYPES) {
         try {
           await checkBarangayHazard({
-            key, coord, hazardType, model: models[hazardType], weatherRaw, barangayReportRate30d,
+            key, coord, hazardType, model: models[hazardType], weatherRaw, dischargeRaw, barangayReportRate30d,
           });
         } catch (err) {
           console.error(`[PredictionEngine] Check failed for ${hazardType}/${key}:`, err.message);

@@ -19,7 +19,14 @@
  *
  * Batches all 17 barangays into one Open-Meteo archive-api call per year
  * (comma-separated lat/lon, same pattern services/openMeteoCache.js uses
- * for the live forecast API) instead of one call per barangay-day.
+ * for the live forecast API) instead of one call per barangay-day. Also
+ * fetches river discharge (Open-Meteo's separate Flood API) per year, same
+ * batching approach.
+ *
+ * Idempotent per barangay-day, not per-run: a day that already has a
+ * snapshot but predates the wind/pressure/et0/river-discharge fields gets
+ * those fields filled in via update rather than skipped; a day whose
+ * snapshot already has them is skipped as before.
  *
  * Run manually:
  *   node scripts/backfillHistoricalSnapshots.js [--start=YYYY-MM-DD] [--end=YYYY-MM-DD]
@@ -34,7 +41,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import HazardSnapshot from "../models/HazardSnapshot.js";
 import { BARANGAY_COORDS, BARANGAY_KEYS } from "../config/barangays.js";
-import { extractSnapshotFeatures } from "../services/weatherSnapshotService.js";
+import { extractSnapshotFeatures, extractRiverDischargeFeature } from "../services/weatherSnapshotService.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "../.env") });
@@ -67,13 +74,33 @@ async function fetchArchiveBatch(coordsList, startDate, endDate) {
     `https://archive-api.open-meteo.com/v1/archive` +
     `?latitude=${lats}&longitude=${lons}` +
     `&start_date=${startDate}&end_date=${endDate}` +
-    `&hourly=precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm` +
+    `&hourly=precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm,` +
+    `windspeed_10m,surface_pressure,et0_fao_evapotranspiration` +
     `&timezone=Asia%2FManila`;
 
   const r = await fetch(url, { signal: AbortSignal.timeout(60000) });
   if (!r.ok) throw new Error(`Open-Meteo archive API returned ${r.status}`);
   const data = await r.json();
   return Array.isArray(data) ? data : [data]; // single-location requests aren't wrapped in an array
+}
+
+// Flood API (flood-api.open-meteo.com) is a separate host/API at daily
+// resolution — GloFAS river discharge, a direct hydrological flood signal
+// distinct from the rainfall/soil-moisture archive call above. Its own
+// start_date/end_date range works the same way for historical queries.
+async function fetchRiverDischargeArchiveBatch(coordsList, startDate, endDate) {
+  const lats = coordsList.map((c) => c.lat).join(",");
+  const lons = coordsList.map((c) => c.lon).join(",");
+  const url =
+    `https://flood-api.open-meteo.com/v1/flood` +
+    `?latitude=${lats}&longitude=${lons}` +
+    `&start_date=${startDate}&end_date=${endDate}` +
+    `&daily=river_discharge&timezone=Asia%2FManila`;
+
+  const r = await fetch(url, { signal: AbortSignal.timeout(60000) });
+  if (!r.ok) throw new Error(`Open-Meteo flood API returned ${r.status}`);
+  const data = await r.json();
+  return Array.isArray(data) ? data : [data];
 }
 
 async function detectDateRange() {
@@ -111,7 +138,7 @@ async function run() {
   const startYear = parseInt(range.start.slice(0, 4), 10);
   const endYear = parseInt(range.end.slice(0, 4), 10);
 
-  let totalInserted = 0, totalSkippedExisting = 0, totalFailedYears = 0;
+  let totalInserted = 0, totalUpdated = 0, totalSkippedExisting = 0, totalFailedYears = 0;
 
   for (let year = startYear; year <= endYear; year++) {
     const yearStart = `${year}-01-01`;
@@ -121,7 +148,7 @@ async function run() {
     const fetchStart = addDays(rangeStart, -LOOKBACK_BUFFER_DAYS);
 
     console.log(`\n── ${year}: fetching ${fetchStart} .. ${rangeEnd} for all barangays ──`);
-    let batch;
+    let batch, dischargeBatch;
     try {
       batch = await fetchArchiveBatch(coordsList, fetchStart, rangeEnd);
     } catch (err) {
@@ -129,8 +156,15 @@ async function run() {
       totalFailedYears++;
       continue;
     }
+    try {
+      dischargeBatch = await fetchRiverDischargeArchiveBatch(coordsList, rangeStart, rangeEnd);
+    } catch (err) {
+      console.error(`  River discharge fetch failed for ${year} (proceeding with riverDischarge=0):`, err.message);
+      dischargeBatch = null;
+    }
 
     const docs = [];
+    let yearUpdated = 0;
     for (const day of eachDay(rangeStart, rangeEnd)) {
       const refDate = new Date(`${day}T23:00:00+08:00`);
       const dayStart = new Date(`${day}T00:00:00+08:00`);
@@ -138,19 +172,40 @@ async function run() {
 
       for (let i = 0; i < coordsList.length; i++) {
         const { key, lat, lon } = coordsList[i];
-        const exists = await HazardSnapshot.exists({ barangay: key, capturedAt: { $gte: dayStart, $lt: dayEnd } });
-        if (exists) { totalSkippedExisting++; continue; }
+        // findOne (not exists), with .lean() so a doc that never actually
+        // stored riverDischarge comes back as genuinely undefined instead of
+        // Mongoose silently applying the schema's `default: 0` on hydration
+        // (which would make every pre-existing doc look "already up to
+        // date" and defeat this entire fill-in path).
+        const existing = await HazardSnapshot.findOne(
+          { barangay: key, capturedAt: { $gte: dayStart, $lt: dayEnd } },
+          { riverDischarge: 1 },
+        ).lean();
+
+        const riverDischarge = dischargeBatch ? extractRiverDischargeFeature(dischargeBatch[i], refDate) : 0;
+
+        if (existing) {
+          if (existing.riverDischarge !== undefined) { totalSkippedExisting++; continue; }
+          const features = extractSnapshotFeatures(batch[i], refDate);
+          await HazardSnapshot.updateOne({ _id: existing._id }, { $set: { ...features, riverDischarge } });
+          yearUpdated++;
+          continue;
+        }
 
         const features = extractSnapshotFeatures(batch[i], refDate);
-        docs.push({ barangay: key, lat, lng: lon, capturedAt: refDate, ...features });
+        docs.push({ barangay: key, lat, lng: lon, capturedAt: refDate, ...features, riverDischarge });
       }
+    }
+    if (yearUpdated > 0) {
+      totalUpdated += yearUpdated;
+      console.log(`  Filled in new fields on ${yearUpdated} pre-existing snapshot(s) for ${year}.`);
     }
 
     if (docs.length > 0) {
       await HazardSnapshot.insertMany(docs, { ordered: false });
       totalInserted += docs.length;
       console.log(`  Inserted ${docs.length} barangay-day snapshot(s) for ${year}.`);
-    } else {
+    } else if (yearUpdated === 0) {
       console.log(`  Nothing new for ${year} (already backfilled).`);
     }
 
@@ -158,8 +213,8 @@ async function run() {
   }
 
   console.log(
-    `\nDone. Inserted ${totalInserted}, already existed (skipped) ${totalSkippedExisting}, ` +
-    `years that failed to fetch: ${totalFailedYears}.`,
+    `\nDone. Inserted ${totalInserted}, updated with new fields ${totalUpdated}, ` +
+    `already up to date (skipped) ${totalSkippedExisting}, years that failed to fetch: ${totalFailedYears}.`,
   );
 
   await mongoose.disconnect();

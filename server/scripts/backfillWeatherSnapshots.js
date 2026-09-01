@@ -16,7 +16,7 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { BARANGAY_COORDS, resolveBarangayKey, nearestBarangayKey } from "../config/barangays.js";
-import { extractSnapshotFeatures } from "../services/weatherSnapshotService.js";
+import { extractSnapshotFeatures, extractRiverDischargeFeature } from "../services/weatherSnapshotService.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "../.env") });
@@ -35,11 +35,31 @@ async function fetchHistorical(lat, lon, centerDate) {
     `https://archive-api.open-meteo.com/v1/archive` +
     `?latitude=${lat}&longitude=${lon}` +
     `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
-    `&hourly=precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm` +
+    `&hourly=precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm,` +
+    `windspeed_10m,surface_pressure,et0_fao_evapotranspiration` +
     `&timezone=Asia%2FManila`;
 
   const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
   if (!r.ok) throw new Error(`Open-Meteo archive API returned ${r.status}`);
+  return r.json();
+}
+
+// Flood API — separate host/API, daily-resolution GloFAS river discharge.
+async function fetchRiverDischargeHistorical(lat, lon, centerDate) {
+  const start = new Date(centerDate);
+  start.setDate(start.getDate() - 1);
+  const end = new Date(centerDate);
+  end.setDate(end.getDate() + 1);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+
+  const url =
+    `https://flood-api.open-meteo.com/v1/flood` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
+    `&daily=river_discharge&timezone=Asia%2FManila`;
+
+  const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`Open-Meteo flood API returned ${r.status}`);
   return r.json();
 }
 
@@ -71,9 +91,17 @@ async function run() {
 
       const coord = BARANGAY_COORDS[barangayKey];
       const weatherRaw = await fetchHistorical(coord.lat, coord.lng, reportTime);
+      let riverDischarge = 0;
+      try {
+        const dischargeRaw = await fetchRiverDischargeHistorical(coord.lat, coord.lng, reportTime);
+        riverDischarge = extractRiverDischargeFeature(dischargeRaw, reportTime);
+      } catch (err) {
+        console.error(`  River discharge fetch failed for report ${report._id} (proceeding with 0):`, err.message);
+      }
       const weatherSnapshot = {
         barangay: barangayKey,
         ...extractSnapshotFeatures(weatherRaw, reportTime),
+        riverDischarge,
         capturedAt: reportTime,
       };
 

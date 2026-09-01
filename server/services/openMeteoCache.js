@@ -29,6 +29,7 @@ export const TTL = {
   FLOOD_FORECAST:  10 * 60 * 1000,
   LANDSLIDE:       10 * 60 * 1000,
   TYPHOON:          5 * 60 * 1000,
+  RIVER_DISCHARGE:  6 * 60 * 60 * 1000, // daily-resolution data, no need to refetch often
 };
 
 export function getCached(key) {
@@ -194,11 +195,19 @@ export function fetchLandslideDataBatch(coordsList) {
 // data only, for both live and backfilled snapshots.
 export const snapshotCacheKey = (lat, lon) => `weather_snapshot_${lat}_${lon}`;
 
+// windspeed_10m/surface_pressure (storm-intensity signals) and
+// et0_fao_evapotranspiration (distinguishes transient wet soil from sustained
+// saturation) supplement the original precipitation/soil-moisture pair — see
+// services/riskFeatures.js for how these feed into the model.
+const SNAPSHOT_HOURLY_VARS =
+  "precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm," +
+  "windspeed_10m,surface_pressure,et0_fao_evapotranspiration";
+
 export function fetchWeatherSnapshot(lat, lon) {
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
-    `&hourly=precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm` +
+    `&hourly=${SNAPSHOT_HOURLY_VARS}` +
     `&past_days=3&forecast_days=1&timezone=Asia%2FManila`;
   return fetchOpenMeteo(url, snapshotCacheKey(lat, lon), TTL.LANDSLIDE);
 }
@@ -209,10 +218,38 @@ export function fetchWeatherSnapshotBatch(coordsList) {
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lats}&longitude=${lons}` +
-    `&hourly=precipitation,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm` +
+    `&hourly=${SNAPSHOT_HOURLY_VARS}` +
     `&past_days=3&forecast_days=1&timezone=Asia%2FManila`;
   return fetchOpenMeteoBatch(
     url, `weather_snapshot_batch_${lats}_${lons}`, TTL.LANDSLIDE, coordsList, snapshotCacheKey,
+  );
+}
+
+// ── River discharge (Flood API) ─────────────────────────────────────────────
+// A separate host/API (flood-api.open-meteo.com, GloFAS v4 reanalysis+forecast)
+// from the forecast/archive APIs above — daily resolution only, a direct
+// hydrological flood signal distinct from the rainfall/soil-moisture proxies.
+// `river_discharge` (not the _mean/_median/etc. stats, which are forecast-only)
+// is used so live and historical-backfill values are computed identically.
+export const riverDischargeCacheKey = (lat, lon) => `river_discharge_${lat}_${lon}`;
+
+export function fetchRiverDischarge(lat, lon) {
+  const url =
+    `https://flood-api.open-meteo.com/v1/flood` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&daily=river_discharge&past_days=2&forecast_days=1&timezone=Asia%2FManila`;
+  return fetchOpenMeteo(url, riverDischargeCacheKey(lat, lon), TTL.RIVER_DISCHARGE);
+}
+
+export function fetchRiverDischargeBatch(coordsList) {
+  const lats = coordsList.map((c) => c.lat).join(",");
+  const lons = coordsList.map((c) => c.lon).join(",");
+  const url =
+    `https://flood-api.open-meteo.com/v1/flood` +
+    `?latitude=${lats}&longitude=${lons}` +
+    `&daily=river_discharge&past_days=2&forecast_days=1&timezone=Asia%2FManila`;
+  return fetchOpenMeteoBatch(
+    url, `river_discharge_batch_${lats}_${lons}`, TTL.RIVER_DISCHARGE, coordsList, riverDischargeCacheKey,
   );
 }
 

@@ -14,13 +14,23 @@
  * auditable across versions.
  *
  * Runnable manually (`node scripts/trainRiskModel.js`) and wired into
- * scripts/alertEngine.js as a weekly cron via the exported trainRiskModels().
+ * scripts/alertEngine.js as a daily cron via the exported trainRiskModels().
  * That export deliberately does NOT touch the mongoose connection or call
  * process.exit() — it assumes a connection already exists (true inside the
  * long-running server) — only the standalone CLI path at the bottom of this
  * file owns connect/disconnect/exit, since doing either inside a function
  * scheduled in the same process as the rest of the API would tear down the
  * shared connection / kill the server on every retrain.
+ *
+ * Promotion safety (matters a lot more once this runs unattended daily than
+ * it did when a human ran it by hand and could eyeball the output): a new
+ * version is only ever activated if (a) training completed without throwing
+ * and (b) isValidTrainedModel() passes basic sanity checks on the result.
+ * The previous active version is never deactivated until the new one is
+ * already confirmed active, so a crash, a bad training run, or a Mongo
+ * hiccup mid-write can never leave predictionEngine.js with zero active
+ * models for a hazard type — worst case, it keeps serving the last good
+ * version, which is exactly the fallback behavior wanted here.
  */
 
 import mongoose from "mongoose";
@@ -36,6 +46,8 @@ import {
   trainLogisticRegression,
   kFoldCrossValidate,
   defaultPriorWeights,
+  findOptimalThreshold,
+  computeMetrics,
 } from "../services/logisticRegression.js";
 import { FEATURE_NAMES } from "../services/riskFeatures.js";
 
@@ -63,6 +75,24 @@ async function computeFieldMetrics(hazardType) {
   };
 }
 
+// Sanity checks on a freshly trained model before it's allowed to replace
+// the active one — this is the "metrics are valid" gate. Catches the
+// concrete ways an automated retrain can go wrong unattended: gradient
+// descent diverging to NaN/Infinity (e.g. from a bad learning rate or a
+// pathological batch), a threshold search landing outside (0,1), or an AUC
+// outside its valid [0,1] range. A human running this by hand would notice
+// garbage output before it mattered; a daily unattended cron won't, so this
+// is what stands in for that judgment call.
+function isValidTrainedModel({ weights, bias, operatingThreshold, metrics }) {
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  if (!Array.isArray(weights) || weights.length !== FEATURE_NAMES.length) return false;
+  if (!weights.every(finite)) return false;
+  if (!finite(bias)) return false;
+  if (!finite(operatingThreshold) || operatingThreshold <= 0 || operatingThreshold >= 1) return false;
+  if (metrics.auc != null && (!finite(metrics.auc) || metrics.auc < 0 || metrics.auc > 1)) return false;
+  return true;
+}
+
 async function trainOne(hazardType) {
   console.log(`\n── ${hazardType} ──────────────────────────────`);
   const { rows } = await buildTrainingSet(hazardType);
@@ -73,7 +103,7 @@ async function trainOne(hazardType) {
       `Skipping — the rule engine (services/${hazardType === "flood" ? "floodAlerts" : "landslideAlerts"}.js) ` +
       `keeps running unaffected; predictionEngine.js will simply have no AI model to load yet.`,
     );
-    return;
+    return { status: "skipped_insufficient_data" };
   }
 
   const X = rows.map((r) => r.features);
@@ -86,16 +116,35 @@ async function trainOne(hazardType) {
 
   const trainOpts = { initialWeights, initialBias: 0, l2: 0.5, lr: 0.1, epochs: 400 };
 
-  // Cross-validated metrics estimate model quality on held-out folds.
-  const metrics = kFoldCrossValidate(Xstd, y, { k: 5, ...trainOpts });
+  let metrics, pooledTrue, pooledProb, operatingThreshold, metricsAtOperatingThreshold, weights, bias;
+  try {
+    // Cross-validated metrics estimate model quality on held-out folds.
+    ({ metrics, pooledTrue, pooledProb } = await kFoldCrossValidate(Xstd, y, { k: 5, ...trainOpts }));
 
-  // Final weights, fit on the full dataset, are what gets deployed.
-  const { weights, bias } = trainLogisticRegression(Xstd, y, trainOpts);
+    // Positives are a tiny fraction of rows (see logisticRegression.js
+    // findOptimalThreshold) — the conventional 0.5 cutoff never fires, so pick
+    // the threshold that actually separates positives from negatives in this
+    // model's own held-out predictions, and report metrics at that point too.
+    operatingThreshold = findOptimalThreshold(pooledTrue, pooledProb);
+    metricsAtOperatingThreshold = computeMetrics(pooledTrue, pooledProb, operatingThreshold);
+
+    // Final weights, fit on the full dataset, are what gets deployed.
+    ({ weights, bias } = await trainLogisticRegression(Xstd, y, trainOpts));
+  } catch (err) {
+    console.error(`Training threw an error — keeping previous active model: ${err.message}`);
+    return { status: "error", error: err.message };
+  }
+
+  if (!isValidTrainedModel({ weights, bias, operatingThreshold, metrics })) {
+    console.log(
+      "Training completed but produced invalid weights/threshold/metrics (NaN, Infinity, or out of " +
+      "range) — discarding this run and keeping the previous active model as-is.",
+    );
+    return { status: "invalid" };
+  }
 
   const lastVersionDoc = await RiskModel.findOne({ hazardType }).sort({ version: -1 });
   const version = (lastVersionDoc?.version ?? 0) + 1;
-
-  await RiskModel.updateMany({ hazardType, isActive: true }, { $set: { isActive: false } });
 
   const notes =
     positiveCount < 5
@@ -104,6 +153,10 @@ async function trainOne(hazardType) {
 
   const fieldMetrics = await computeFieldMetrics(hazardType);
 
+  // Create the new version inactive first, then flip it active, and only
+  // then deactivate the old one(s) — see the file header comment. If any
+  // step here throws, the worst case is the old version stays (or briefly
+  // both are) active; it is never the case that neither is.
   const doc = await RiskModel.create({
     hazardType,
     version,
@@ -120,21 +173,37 @@ async function trainOne(hazardType) {
       f1: metrics.f1,
       auc: metrics.auc,
     },
+    operatingThreshold,
+    metricsAtOperatingThreshold: {
+      precision: metricsAtOperatingThreshold.precision,
+      recall: metricsAtOperatingThreshold.recall,
+      f1: metricsAtOperatingThreshold.f1,
+    },
     fieldMetrics,
-    isActive: true,
+    isActive: false,
     notes,
   });
+  doc.isActive = true;
+  await doc.save();
+  await RiskModel.updateMany(
+    { hazardType, isActive: true, _id: { $ne: doc._id } },
+    { $set: { isActive: false } },
+  );
 
   console.log(
     `Trained v${version} — rows=${rows.length} positives=${positiveCount} ` +
-    `precision=${fmt(metrics.precision)} recall=${fmt(metrics.recall)} f1=${fmt(metrics.f1)} auc=${fmt(metrics.auc)}`,
+    `[@0.50] precision=${fmt(metrics.precision)} recall=${fmt(metrics.recall)} f1=${fmt(metrics.f1)} auc=${fmt(metrics.auc)}`,
+  );
+  console.log(
+    `  [@${operatingThreshold.toFixed(3)} operating threshold] precision=${fmt(metricsAtOperatingThreshold.precision)} ` +
+    `recall=${fmt(metricsAtOperatingThreshold.recall)} f1=${fmt(metricsAtOperatingThreshold.f1)}`,
   );
   console.log(
     `  Field performance so far: ${fieldMetrics.truePositives} confirmed / ${fieldMetrics.falsePositives} false positive ` +
     `(precision=${fmt(fieldMetrics.precision)})`,
   );
   if (notes) console.log(`  Note: ${notes}`);
-  return doc;
+  return { status: "promoted", version, doc };
 }
 
 function fmt(v) {
@@ -142,12 +211,17 @@ function fmt(v) {
 }
 
 // The reusable core — called by the CLI path below and by alertEngine.js's
-// weekly cron. Assumes mongoose is already connected.
+// daily cron. Assumes mongoose is already connected. Returns a per-hazard
+// status summary (not thrown errors) so a scheduled caller can log a clean
+// one-line result without needing to know this module's internals.
 export async function trainRiskModels() {
   console.log("[TrainRiskModel] Starting training run...");
-  await trainOne("flood");
-  await trainOne("landslide");
-  console.log("[TrainRiskModel] Training run complete.");
+  const flood = await trainOne("flood");
+  const landslide = await trainOne("landslide");
+  console.log(
+    `[TrainRiskModel] Training run complete — flood: ${flood.status}, landslide: ${landslide.status}`,
+  );
+  return { flood, landslide };
 }
 
 // Standalone CLI usage only (`node scripts/trainRiskModel.js`) — owns the

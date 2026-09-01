@@ -25,6 +25,22 @@ const HazardSnapshotSchema = new mongoose.Schema({
   // Open-Meteo soil moisture at capturedAt (m3/m3 fraction, ~0-0.5 range).
   soilTop:   { type: Number, default: 0 },
   soilDeep:  { type: Number, default: 0 },
+
+  // Point-in-time wind speed (km/h) and surface pressure (hPa) at capturedAt —
+  // storm-intensity signals distinct from rainfall/soil alone.
+  windSpeed10m:    { type: Number, default: 0 },
+  surfacePressure: { type: Number, default: 0 },
+
+  // Reference evapotranspiration (mm) accumulated over the trailing 24h —
+  // helps distinguish transient wet soil (rain just fell) from sustained
+  // saturation (rain exceeding evapotranspiration over time), relevant to
+  // landslide risk specifically.
+  et0_24h: { type: Number, default: 0 },
+
+  // GloFAS river discharge (m3/s) for capturedAt's calendar day — Open-Meteo's
+  // Flood API, a direct hydrological flood signal distinct from local
+  // rainfall/soil-moisture proxies. Daily resolution (see services/openMeteoCache.js).
+  riverDischarge: { type: Number, default: 0 },
 });
 
 HazardSnapshotSchema.index({ barangay: 1, capturedAt: -1 });

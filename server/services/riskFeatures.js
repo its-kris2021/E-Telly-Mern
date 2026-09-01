@@ -21,6 +21,15 @@ export const FEATURE_NAMES = [
   "soilDeep",
   "barangayReportRate30d",
   "susceptibility",
+  // Storm-intensity and hydrological signals supplementing the original
+  // rainfall/soil-moisture pair — see services/weatherSnapshotService.js
+  // (windSpeed10m/surfacePressure/et0_24h, from the forecast/archive API's
+  // hourly variables) and services/openMeteoCache.js's fetchRiverDischarge
+  // (a separate API — GloFAS river discharge, a direct flood signal).
+  "windSpeed10m",
+  "surfacePressure",
+  "et0_24h",
+  "riverDischarge",
 ];
 
 // Static, zero-data-required signal: is this a documented high-susceptibility

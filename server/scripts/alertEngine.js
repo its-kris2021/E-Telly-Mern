@@ -85,13 +85,25 @@ async function runAgencyChecks() {
 // Retrains the flood/landslide risk models against whatever reports +
 // weather history have accumulated since the last run. Wrapped the same way
 // every other scheduled job here is — a thrown error must not take down the
-// cron scheduler, just get logged and wait for next week's run.
-async function runWeeklyRetrain() {
-  console.log("[AlertEngine] Running weekly risk-model retrain…", new Date().toISOString());
+// cron scheduler, just get logged and wait for tomorrow's run. The actual
+// promotion safety (only activate a new version if training succeeded and
+// its metrics pass sanity checks; otherwise keep serving the previous
+// version) lives in trainRiskModel.js's trainOne() — this wrapper only has
+// to make sure a failure here can't crash the process or block the 30-min
+// prediction/snapshot crons below.
+async function runDailyRetrain() {
+  console.log("[AlertEngine] Running daily risk-model retrain…", new Date().toISOString());
   try {
-    await trainRiskModels();
+    const { flood, landslide } = await trainRiskModels();
+    if (flood.status !== "promoted" || landslide.status !== "promoted") {
+      console.log(
+        `[AlertEngine] Daily retrain: not every model was promoted this run ` +
+        `(flood: ${flood.status}, landslide: ${landslide.status}) — previous active version(s) ` +
+        `for any non-promoted hazard type keep serving live predictions unchanged.`,
+      );
+    }
   } catch (err) {
-    console.error("[AlertEngine] Weekly retrain failed:", err.message);
+    console.error("[AlertEngine] Daily retrain failed:", err.message);
   }
 }
 
@@ -112,8 +124,13 @@ export function startAlertEngine() {
   // is warm, and well after runSystemChecks so it sees this cycle's rule-based
   // alerts when deciding whether the rule engine already covers a barangay.
   cron.schedule("7,37 * * * *", runPredictionChecks,         { scheduled: true, timezone: "Asia/Manila" });
-  // Weekly retrain, off-peak (Sunday 3am Manila) — well clear of the 15/30-min
-  // jobs above. Not on startup: retraining every deploy/restart would waste
-  // time re-fitting on data that likely hasn't changed since the last run.
-  cron.schedule("0 3 * * 0", runWeeklyRetrain,                { scheduled: true, timezone: "Asia/Manila" });
+  // Daily retrain, off-peak (3:20am Manila). Minute 20 falls on none of the
+  // */15, */30, "5,35", or "7,37" marks used above, so it never starts on
+  // the exact same tick as another job — though at ~5 minutes of real
+  // training time it can still run alongside a 3:30am tick; that's fine,
+  // since trainOne() (trainRiskModel.js) never leaves predictionEngine.js
+  // without an active model to read even if a retrain is mid-flight. Not on
+  // startup: retraining every deploy/restart would waste time re-fitting on
+  // data that likely hasn't changed since the last run.
+  cron.schedule("20 3 * * *", runDailyRetrain,                { scheduled: true, timezone: "Asia/Manila" });
 }

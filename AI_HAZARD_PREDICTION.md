@@ -12,21 +12,30 @@ enough report + weather history for a trained model to exist. See [Cold start](#
 - Nothing existing was removed or renamed in a way that breaks callers. `services/floodAlerts.js`
   and `services/landslideAlerts.js` changed from checking one city-wide point to checking all 17
   barangays — everything else is additive (new files, new optional fields, new routes).
-- No new npm dependencies. The "AI" is a ~150-line hand-rolled L2-regularized logistic regression
-  (`server/services/logisticRegression.js`) — no Python, no ML package, no external model service.
+- The "AI" is an L2-regularized logistic regression (`server/services/logisticRegression.js`),
+  trained with `@tensorflow/tfjs` (pure-JS backend, no native compilation, no Python, no separate
+  model service) — a single dense sigmoid unit is mathematically exactly logistic regression, just
+  fit with TensorFlow's SGD optimizer and binary cross-entropy loss instead of a hand-rolled
+  gradient descent loop. Live inference (`predictProba` in the same file) stays plain
+  arithmetic on stored weight arrays — no tfjs tensors on the hot path, since that runs for
+  17 barangays × 2 hazard types every 30 minutes.
 - Everything server-side is guarded to fail soft: if Open-Meteo is rate-limited, if there's no
   trained model yet, if a report has no usable location — the code logs and returns early. It
   never throws in a way that breaks report submission or the existing alert cron jobs.
 
-## Why a hand-rolled logistic regression, not a real ML stack
+## Why logistic regression, not a heavier model
 
 The realistic dataset size for this deployment (a capstone project, one city) is tens to low
 hundreds of labeled report-days — not enough to justify a random forest, gradient boosting, or a
-separate Python/scikit-learn microservice, all of which would overfit and add an entire second
-deployable service for no accuracy gain at this scale. A small, regularized linear model, seeded
-with a physically-informed prior and retrained on real reports, is both the right complexity for
-the data and fully auditable — every prediction can be traced to specific feature weights, which
-matters for a disaster-alerting feature.
+deeper neural network, all of which would overfit at this scale without adding accuracy. A small,
+L2-regularized linear model, seeded with a physically-informed prior and retrained on real
+reports, is both the right complexity for the data and fully auditable — every prediction can be
+traced to specific feature weights, which matters for a disaster-alerting feature.
+
+It's trained with TensorFlow.js rather than a Python/scikit-learn service so the whole system stays
+one deployable Node process — no second runtime, no cross-service network calls on the prediction
+path — while still using an established, widely-used ML library instead of hand-rolled gradient
+descent math.
 
 ## Architecture at a glance
 
@@ -120,16 +129,37 @@ render as multiple markers automatically.
 ### 3. Feature vector + training
 - **`server/services/riskFeatures.js`** (new) — the single definition of the model's feature
   vector, used identically by training and live inference so they can never drift apart:
-  `[rain_6h, rain_24h, soilTop, soilDeep, barangayReportRate30d, susceptibility]`.
+  `[rain_6h, rain_24h, soilTop, soilDeep, barangayReportRate30d, susceptibility, windSpeed10m,
+  surfacePressure, et0_24h, riverDischarge]`. The last four (wind speed, surface pressure,
+  evapotranspiration from the forecast/archive API's hourly variables; river discharge from
+  Open-Meteo's separate Flood API, GloFAS v4) supplement the original rain/soil-moisture pair —
+  river discharge in particular is a direct hydrological flood signal rather than a rainfall
+  proxy. Existing `HazardSnapshot` rows predate these fields and default them to 0 until
+  re-backfilled (`scripts/backfillHistoricalSnapshots.js`) or naturally refreshed by the live
+  30-min capture cron.
   `barangayReportRate30d` is a **30-day rolling report count**, deliberately not a short window —
   reports can arrive hours late via offline mesh relay (see `etelly-mobile/OFFLINE_IMPLEMENTATION.md`),
   and a 30-day window is insensitive to that delay in a way a "reports in the last hour" feature
   would not be.
 - **`server/services/logisticRegression.js`** (new) — `fitStandardization`,
-  `trainLogisticRegression` (batch gradient descent, L2-regularized), `predictProba`,
-  `kFoldCrossValidate`, `computeMetrics` (precision/recall/F1/AUC). `defaultPriorWeights()` seeds
-  training with small positive weights on every hazard-associated feature so day-one output (before
-  any real training data) isn't nonsense — every retrain then adjusts these from real reports.
+  `trainLogisticRegression` (TensorFlow.js, L2-regularized), `predictProba`, `kFoldCrossValidate`,
+  `computeMetrics` (precision/recall/F1/AUC). `defaultPriorWeights()` seeds training with small
+  positive weights on every hazard-associated feature so day-one output (before any real training
+  data) isn't nonsense — every retrain then adjusts these from real reports.
+
+  **Class imbalance and the operating threshold**: on the real historical dataset, flood/landslide
+  positives are ~0.5%/0.3% of labeled barangay-days. Predicted probabilities for even the riskiest
+  days stay well under the conventional 0.5 cutoff, so precision/recall computed at 0.5 come back
+  as `n/a`/`0.00` even when the model has learned real structure (AUC — threshold-independent — was
+  0.91/0.94 on real data). `findOptimalThreshold()` scans the model's pooled cross-validation
+  predictions and picks the threshold that maximizes F1; that value is stored per model as
+  `RiskModel.operatingThreshold` and is what `predictionEngine.js` actually gates live alerts on
+  (see Phase 4), not a fixed constant. `trainRiskModel.js` reports metrics at both 0.5 (for
+  comparability across training runs) and at this operating threshold (the metrics that reflect
+  real usable performance). Note this is an F1-optimal point, not a business-tuned one — it treats
+  a missed hazard and a false alarm as equally costly, which may not match how a disaster-alerting
+  system should actually weigh those two failure modes; revisit if false-alarm rate in the field
+  metrics (Phase 6) turns out to be a problem.
 - **`server/models/RiskModel.js`** (new) — one **versioned** Mongoose doc per (hazardType, train
   run): weights, bias, standardization params, offline CV `metrics`, and live `fieldMetrics`
   (see Phase 6). Stored in Mongo, not a file on disk, since the deploy target may not have
@@ -155,10 +185,13 @@ render as multiple markers automatically.
 
 1. Loads the active `RiskModel` for `flood` and `landslide` (if neither exists, does nothing).
 2. Per barangay: computes the same feature vector as training, scores it (`predictProba`).
-3. **Gates against the rule engine** — only creates an AI alert if the probability crosses 0.6
-   *and* there isn't already an active `source:"system"` alert of equal-or-higher severity for
-   that barangay/type. The AI layer is meant to surface risk the physics-based rules miss, not
-   duplicate or contradict them on the map.
+3. **Gates against the rule engine** — only creates an AI alert if the probability crosses that
+   model's own `operatingThreshold` (see Phase 3's class-imbalance note — a fixed 0.6 would almost
+   never fire given how rare positives are) *and* there isn't already an active `source:"system"`
+   alert of equal-or-higher severity for that barangay/type. The AI layer is meant to surface risk
+   the physics-based rules miss, not duplicate or contradict them on the map. Severity bands
+   (`watch`/`warning`/`critical`) are likewise scaled relative to the operating threshold, not fixed
+   absolute probabilities, for the same reason.
 4. Upserts an `Alert` with `source: "ai"`, `confidence`, `modelVersion`.
 
 `server/models/Alert.js` (modified) — added `"ai"` to the `source` enum, plus `confidence`,
@@ -291,8 +324,9 @@ a real model:
 - Single unified logistic regression per hazard type, not per-barangay models — barangay identity
   only enters via the static susceptibility feature and the rolling report-rate feature, not a
   separate model per area. Revisit if per-barangay behavior turns out to diverge a lot.
-- No Python/scikit-learn service, deliberately — see [Why a hand-rolled logistic regression](#why-a-hand-rolled-logistic-regression-not-a-real-ml-stack).
-  If the labeled dataset eventually grows into the thousands, this is the first thing to revisit.
+- No Python/scikit-learn service, deliberately — see [Why logistic regression, not a heavier model](#why-logistic-regression-not-a-heavier-model).
+  If the labeled dataset eventually grows into the thousands, a heavier model architecture (not
+  necessarily a Python service — tfjs supports deeper networks too) is the first thing to revisit.
 - `trainRiskModel.js` is not on a cron yet — it's meant to be run manually (or you can add a
   `cron.schedule(...)` call in `alertEngine.js` following the existing pattern once the team is
   comfortable with unattended retraining).
