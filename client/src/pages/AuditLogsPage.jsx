@@ -8,6 +8,8 @@ const PAGE_SIZE = 20;
 
 const DOMAIN_TABS = [
   { key: "",                 label: "All" },
+  { key: "login",             label: "Logins" },
+  { key: "user_management",   label: "User Management" },
   { key: "chat",              label: "Chat Moderation" },
   { key: "emergency_report",  label: "Reports" },
   { key: "alert",             label: "Alerts" },
@@ -15,6 +17,8 @@ const DOMAIN_TABS = [
 ];
 
 const DOMAIN_BADGE = {
+  login:             { label: "Login",          className: "bg-teal-100 text-teal-700" },
+  user_management:   { label: "User Management", className: "bg-yellow-100 text-yellow-700" },
   chat_case:         { label: "Chat Case",  className: "bg-red-100 text-red-700" },
   chat_user:         { label: "Chat User",  className: "bg-orange-100 text-orange-700" },
   emergency_report:  { label: "Report",     className: "bg-blue-100 text-blue-700" },

@@ -462,9 +462,21 @@ export default function ReportsLayer({ visible, filters = {}, showAlerts = true 
     };
   }, [map]);
 
-  // Rebuild markers when visibility, reports, alerts, or filters change
+  // Rebuild markers when visibility, reports, alerts, or filters change.
+  // Reports/alerts refetch on a 15s poll + on every socket event, so this runs
+  // far more often than the underlying data actually changes — clearing the
+  // layer unconditionally would close a popup the user just opened almost as
+  // soon as they opened it. Capture whichever marker has an open popup before
+  // the rebuild and reopen its equivalent afterward so real-time updates don't
+  // interrupt a report/alert someone is actively reading.
   useEffect(() => {
     if (!markersLayerRef.current) return;
+
+    let openPopupKey = null;
+    markersLayerRef.current.eachLayer((layer) => {
+      if (layer.isPopupOpen?.()) openPopupKey = layer._popupKey ?? null;
+    });
+
     markersLayerRef.current.clearLayers();
     if (!visible) return;
 
@@ -477,12 +489,14 @@ export default function ReportsLayer({ visible, filters = {}, showAlerts = true 
       const marker = L.marker(coords, {
         icon: createReportIcon(report.emergencyType, report.severity),
       });
+      marker._popupKey = `report:${report._id}`;
       marker.bindPopup(createReportPopup(report), {
         maxWidth: 300,
         minWidth: 250,
       });
       marker.on("click", (e) => L.DomEvent.stop(e.originalEvent));
       marker.addTo(markersLayerRef.current);
+      if (marker._popupKey === openPopupKey) marker.openPopup();
     });
 
     // Official alerts — only when the reports layer is explicitly on (hazard layers handle their own)
@@ -491,12 +505,14 @@ export default function ReportsLayer({ visible, filters = {}, showAlerts = true 
         const marker = L.marker([alert.lat, alert.lng], {
           icon: createAlertIcon(alert.type, alert.severity),
         });
+        marker._popupKey = `alert:${alert._id}`;
         marker.bindPopup(createAlertPopup(alert), {
           maxWidth: 300,
           minWidth: 250,
         });
         marker.on("click", (e) => L.DomEvent.stop(e.originalEvent));
         marker.addTo(markersLayerRef.current);
+        if (marker._popupKey === openPopupKey) marker.openPopup();
       });
     }
   }, [visible, filteredReports, alerts, showAlerts, map]);

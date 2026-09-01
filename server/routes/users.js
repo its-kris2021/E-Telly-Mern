@@ -3,6 +3,19 @@ import bcrypt from "bcryptjs";
 import User from "../models/user.js";
 import { protect, requireRole } from "../middleware/auth.js";
 import { BARANGAY_KEYS } from "../config/barangays.js";
+import { recordAuditLog } from "../services/auditLog.js";
+
+function logUserAction(req, action, target, notes = "") {
+  return recordAuditLog({
+    domain: "user_management",
+    action,
+    actorId: req.user.id,
+    actorName: req.user.name,
+    actorRole: req.user.role,
+    notes,
+    target,
+  });
+}
 
 const router = express.Router();
 
@@ -99,6 +112,13 @@ router.post("/", protect, requireRole("system_admin"), async (req, res) => {
       contactEmail: contactEmail?.trim() || "",
     });
 
+    await logUserAction(
+      req,
+      "create",
+      { type: "user", id: String(newUser._id), label: newUser.name },
+      `role: ${newUser.role}`,
+    );
+
     res.status(201).json({
       id: newUser._id,
       name: newUser.name,
@@ -142,6 +162,13 @@ router.put("/:id", protect, requireRole("system_admin"), async (req, res) => {
       new: true,
     }).select("-password");
 
+    await logUserAction(
+      req,
+      "update",
+      { type: "user", id: String(updated._id), label: updated.name },
+      before.role !== role ? `role: ${before.role} → ${role}` : "profile updated",
+    );
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: "Failed to update user" });
@@ -163,6 +190,8 @@ router.post("/:id/reset-password", protect, requireRole("system_admin"), async (
 
     if (!updated) return res.status(404).json({ message: "User not found" });
 
+    await logUserAction(req, "reset_password", { type: "user", id: String(updated._id), label: updated.name });
+
     res.json({ tempPassword });
   } catch (err) {
     res.status(500).json({ message: "Failed to reset password" });
@@ -172,7 +201,7 @@ router.post("/:id/reset-password", protect, requireRole("system_admin"), async (
 // DELETE /api/users/:id — delete user (system admin only)
 router.delete("/:id", protect, requireRole("system_admin"), async (req, res) => {
   try {
-    const target = await User.findById(req.params.id).select("role");
+    const target = await User.findById(req.params.id).select("role name");
     if (!target) return res.status(404).json({ message: "User not found" });
     if (target.role === "system_admin" && (await isOnlySystemAdmin(target._id))) {
       return res.status(409).json({ message: "Cannot delete the only remaining System Admin account." });
@@ -180,6 +209,8 @@ router.delete("/:id", protect, requireRole("system_admin"), async (req, res) => 
 
     const deleted = await User.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: "User not found" });
+
+    await logUserAction(req, "delete", { type: "user", id: String(target._id), label: target.name }, `role: ${target.role}`);
 
     res.json({ message: "User deleted successfully" });
   } catch (err) {

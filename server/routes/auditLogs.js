@@ -5,6 +5,7 @@ import ChatModerationCase from "../models/ChatModerationCase.js";
 import ChatUserModerationProfile from "../models/ChatUserModerationProfile.js";
 import Alert from "../models/Alert.js";
 import EvacuationLog from "../models/EvacuationLog.js";
+import AuditLog from "../models/AuditLog.js";
 
 const router = express.Router();
 
@@ -18,6 +19,8 @@ const DOMAIN_FILTERS = {
   emergency_report: (e) => e.domain === "emergency_report",
   alert: (e) => e.domain === "alert",
   evacuation: (e) => e.domain === "evacuation",
+  login: (e) => e.domain === "login",
+  user_management: (e) => e.domain === "user_management",
 };
 
 // Per-source scan cap — mirrors the existing lightweight "scan bounded recent
@@ -147,6 +150,20 @@ async function collectEvacuationEntries() {
   }));
 }
 
+async function collectAuditLogEntries() {
+  const logs = await AuditLog.find().sort({ at: -1 }).limit(SOURCE_LIMIT).lean();
+
+  return logs.map((l) => ({
+    domain: l.domain,
+    action: l.action,
+    actorName: l.actorName,
+    actorRole: l.actorRole || null,
+    at: l.at,
+    notes: l.notes || "",
+    target: l.target || null,
+  }));
+}
+
 // GET /api/audit-logs?domain=&action=&search=&from=&to=&page=&limit=
 router.get("/", protect, requireRole("system_admin"), async (req, res) => {
   try {
@@ -156,15 +173,16 @@ router.get("/", protect, requireRole("system_admin"), async (req, res) => {
       return res.status(400).json({ message: "Invalid domain" });
     }
 
-    const [chatCase, chatUser, emergencyReport, alert, evacuation] = await Promise.all([
+    const [chatCase, chatUser, emergencyReport, alert, evacuation, auditLog] = await Promise.all([
       collectChatCaseEntries(),
       collectChatUserEntries(),
       collectEmergencyReportEntries(),
       collectAlertEntries(),
       collectEvacuationEntries(),
+      collectAuditLogEntries(),
     ]);
 
-    let entries = [...chatCase, ...chatUser, ...emergencyReport, ...alert, ...evacuation];
+    let entries = [...chatCase, ...chatUser, ...emergencyReport, ...alert, ...evacuation, ...auditLog];
 
     if (domain) entries = entries.filter(DOMAIN_FILTERS[domain]);
     if (action) entries = entries.filter((e) => e.action === action);

@@ -6,6 +6,7 @@ import admin from "firebase-admin";
 import User from "../models/user.js";
 import { protect } from "../middleware/auth.js";
 import { initFirebase } from "../services/fcm.js";
+import { recordAuditLog } from "../services/auditLog.js";
 
 const router = express.Router();
 
@@ -17,6 +18,18 @@ function signJwt(user) {
     process.env.JWT_SECRET,
     { expiresIn: "1d" },
   );
+}
+
+function logLogin(user, method) {
+  return recordAuditLog({
+    domain: "login",
+    action: "login",
+    actorId: user._id,
+    actorName: user.name,
+    actorRole: user.role,
+    notes: method,
+    target: { type: "user", id: String(user._id), label: user.name },
+  });
 }
 
 function userPayload(user) {
@@ -137,6 +150,7 @@ router.post("/login", async (req, res) => {
         return res.status(404).json({ message: "No account found. Please sign up first." });
       }
 
+      await logLogin(user, "Firebase sign-in");
       return res.json({ token: signJwt(user), user: userPayload(user) });
     } catch (err) {
       if (err.code?.startsWith("auth/")) {
@@ -160,6 +174,7 @@ router.post("/login", async (req, res) => {
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) return res.status(400).json({ message: "Incorrect username or password" });
 
+      await logLogin(user, "Email & password sign-in");
       return res.json({ token: signJwt(user), user: userPayload(user) });
     } catch (err) {
       return res.status(500).json({ message: "Server error" });
@@ -264,6 +279,7 @@ router.post("/google", async (req, res) => {
       });
     }
 
+    await logLogin(user, isNewUser ? "Google sign-in (account created)" : "Google sign-in");
     res.json({
       token:     signJwt(user),
       user:      userPayload(user),

@@ -68,7 +68,7 @@ app.use((req, res, next) => {
       "default-src 'self'",
       "script-src 'self' https://unpkg.com",
       "style-src 'self' 'unsafe-inline' https://unpkg.com",
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.tile.opentopomap.org",
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.tile.opentopomap.org https://lipad-fmc.dream.upd.edu.ph",
       "connect-src 'self' https://nominatim.openstreetmap.org https://earthquake.usgs.gov https://lipad-fmc.dream.upd.edu.ph https://geoserver.geoportal.gov.ph https://geoportal.gov.ph https://www.gdacs.org https://bagong.pagasa.dost.gov.ph https://www.pagasa.dost.gov.ph",
       "worker-src 'self'",
       "manifest-src 'self'",
