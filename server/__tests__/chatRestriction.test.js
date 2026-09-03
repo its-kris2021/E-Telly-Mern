@@ -5,6 +5,7 @@ import { buildTestApp } from "./helpers/testApp.js";
 import { makeToken } from "./helpers/auth.js";
 import User from "../models/user.js";
 import ChatUserModerationProfile from "../models/ChatUserModerationProfile.js";
+import { runRestrictionExpiryCleanup } from "../services/chatRestrictionService.js";
 
 let app;
 
@@ -38,7 +39,7 @@ async function seedMessage({ senderId, receiverId, text = "hello", timestamp = n
   return insertedId;
 }
 
-async function reportAndWarn({ sender, reviewerToken, reason = "spam" }) {
+async function reportAndWarn({ sender, reviewerToken, reason = "scam_spam" }) {
   const reporter = await seedUser();
   const messageId = await seedMessage({ senderId: sender._id, receiverId: reporter._id });
   await request(app)
@@ -213,6 +214,89 @@ describe("GET /api/chat-restriction/status — resident self-check", () => {
     const res = await statusFor(user._id);
     expect(res.body.restricted).toBe(true);
     expect(res.body.permanent).toBe(true);
+  });
+});
+
+describe("runRestrictionExpiryCleanup — proactive sweep for the mobile app's direct-read restriction check", () => {
+  test("clears an expired temporary restriction without anyone touching the profile first", async () => {
+    const user = await seedUser();
+    await ChatUserModerationProfile.create({
+      userId: user._id,
+      warningCount: 2,
+      restricted: true,
+      restrictedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      restrictionType: "temporary",
+      restrictionStartAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      restrictionEndAt: new Date(Date.now() - 1000),
+    });
+
+    const count = await runRestrictionExpiryCleanup();
+    expect(count).toBe(1);
+
+    const profile = await ChatUserModerationProfile.findOne({ userId: user._id });
+    expect(profile.restricted).toBe(false);
+    expect(profile.restrictionType).toBe("none");
+    expect(profile.history.at(-1).action).toBe("restriction_expired");
+  });
+
+  test("leaves a still-active temporary restriction untouched", async () => {
+    const user = await seedUser();
+    await ChatUserModerationProfile.create({
+      userId: user._id,
+      warningCount: 2,
+      restricted: true,
+      restrictedAt: new Date(),
+      restrictionType: "temporary",
+      restrictionStartAt: new Date(),
+      restrictionEndAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const count = await runRestrictionExpiryCleanup();
+    expect(count).toBe(0);
+
+    const profile = await ChatUserModerationProfile.findOne({ userId: user._id });
+    expect(profile.restricted).toBe(true);
+  });
+
+  test("never touches a permanent restriction", async () => {
+    const user = await seedUser();
+    await ChatUserModerationProfile.create({
+      userId: user._id,
+      warningCount: 5,
+      restricted: true,
+      restrictedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365),
+      restrictionType: "permanent",
+      restrictionStartAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 365),
+      restrictionEndAt: null,
+    });
+
+    const count = await runRestrictionExpiryCleanup();
+    expect(count).toBe(0);
+
+    const profile = await ChatUserModerationProfile.findOne({ userId: user._id });
+    expect(profile.restricted).toBe(true);
+    expect(profile.restrictionType).toBe("permanent");
+  });
+
+  test("sweeps multiple expired profiles in one pass", async () => {
+    const users = await Promise.all([seedUser(), seedUser(), seedUser()]);
+    await ChatUserModerationProfile.insertMany(
+      users.map((u) => ({
+        userId: u._id,
+        warningCount: 2,
+        restricted: true,
+        restrictedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        restrictionType: "temporary",
+        restrictionStartAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        restrictionEndAt: new Date(Date.now() - 1000),
+      })),
+    );
+
+    const count = await runRestrictionExpiryCleanup();
+    expect(count).toBe(3);
+
+    const stillRestricted = await ChatUserModerationProfile.countDocuments({ restricted: true });
+    expect(stillRestricted).toBe(0);
   });
 });
 

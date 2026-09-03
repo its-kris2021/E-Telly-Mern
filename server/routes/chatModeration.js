@@ -15,8 +15,7 @@ import { resolveBarangayKey } from "../config/barangays.js";
 import { sendPushToUser } from "./push.js";
 import {
   getOrCreateProfile,
-  refreshExpiry,
-  tierForViolationNumber,
+  applyConfirmedViolation,
   formatUserMessage,
   computeStatus,
   applyManualRestriction,
@@ -302,62 +301,14 @@ router.post("/cases/:messageId/warn", async (req, res) => {
     const { note } = req.body;
     const trimmedNote = typeof note === "string" ? note.trim().slice(0, 1000) : "";
     const actorName = req.user.name || req.user.email || "staff";
-    const now = new Date();
-    const baseEntry = {
-      caseId: caseDoc._id,
-      messageId: caseDoc.messageId,
-      byId: req.user.id,
-      byName: actorName,
-      byRole: req.user.role,
-      at: now,
-    };
 
-    const profile = await getOrCreateProfile(userId);
-    // Clear a stale expired restriction first so this violation's escalation
-    // is computed against the user's real current state.
-    refreshExpiry(profile, now);
-    profile.warningCount += 1;
-    profile.history.push({ ...baseEntry, action: "warning_issued", note: trimmedNote });
-    caseDoc.logs.push({
-      action: "warning_issued", byId: req.user.id, byName: actorName, byRole: req.user.role,
-      at: now, notes: trimmedNote,
+    const { profile, tier, restrictionJustApplied } = await applyConfirmedViolation({
+      caseDoc,
+      actorId: req.user.id,
+      actorName,
+      actorRole: req.user.role,
+      note: trimmedNote,
     });
-
-    // Escalation ladder: 1st violation -> warning only, 2nd -> 24h, 3rd -> 3
-    // days, 4th and beyond -> 7 days. Permanent restriction is never applied
-    // automatically — that's an admin-only manual action for severe/repeated
-    // cases (see POST /users/:userId/restriction).
-    let restrictionJustApplied = false;
-    const tier = tierForViolationNumber(profile.warningCount);
-    if (tier.type === "temporary") {
-      profile.restricted = true;
-      profile.restrictedAt = now;
-      profile.restrictionType = "temporary";
-      profile.restrictionStartAt = now;
-      profile.restrictionEndAt = new Date(now.getTime() + tier.durationMs);
-      restrictionJustApplied = true;
-      const restrictionNote = `Automatically applied after violation #${profile.warningCount} (${tier.label} chat restriction)`;
-      profile.history.push({ ...baseEntry, action: "restriction_applied", note: restrictionNote });
-      caseDoc.logs.push({
-        action: "restriction_applied", byId: req.user.id, byName: actorName, byRole: req.user.role,
-        at: now, notes: restrictionNote,
-      });
-    }
-
-    const resolveNote = restrictionJustApplied
-      ? `Resolved — Warning #${profile.warningCount} sent, Chat Restriction applied`
-      : `Resolved — Warning #${profile.warningCount} sent`;
-    caseDoc.status = "resolved";
-    caseDoc.reviewedBy = actorName;
-    caseDoc.reviewedAt = now;
-    caseDoc.logs.push({
-      action: "status_change", byId: req.user.id, byName: actorName, byRole: req.user.role,
-      at: now, notes: resolveNote,
-    });
-    profile.history.push({ ...baseEntry, action: "case_resolved", note: resolveNote });
-
-    await profile.save();
-    await caseDoc.save();
 
     // Notify everyone who reported this message that their report was
     // confirmed and acted on — reporters otherwise have no way to know

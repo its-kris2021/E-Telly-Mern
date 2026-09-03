@@ -24,6 +24,7 @@ import chatRestrictionRoutes from "./routes/chatRestriction.js";
 import auditLogRoutes from "./routes/auditLogs.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
+import { startChatModerationScheduler } from "./scripts/chatModerationScheduler.js";
 import Alert from "./models/Alert.js";
 import { signAlert } from "./services/alertSigning.js";
 import { getRestrictionStatus } from "./services/chatRestrictionService.js";
@@ -517,6 +518,10 @@ mongoose
       console.log("[Local Mode] Sync scheduler started — watches for internet every 30s.");
       startSyncScheduler();
     }
+
+    // Pure local-DB operation — runs in both local and cloud mode, unlike
+    // the hazard-alert crons above which need upstream internet access.
+    startChatModerationScheduler();
 
     // Watch for new reports from any source (including Flutter direct saves)
     try {

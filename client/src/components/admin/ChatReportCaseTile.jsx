@@ -8,15 +8,11 @@ const API_BASE = import.meta.env.PROD
   : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
 
 const REASON_LABELS = {
-  spam: "Spam",
-  abusive: "Abusive / offensive",
-  bullying: "Bullying",
   harassment: "Harassment",
-  threats: "Threats or intimidation",
-  hate_speech: "Hate speech",
-  inappropriate_content: "Inappropriate content",
-  scam: "Scam / fraud",
-  violence: "Violence or dangerous content",
+  hate_speech: "Hate Speech",
+  violence_self_harm: "Violence or Self-Harm",
+  sexual_content: "Sexual Content",
+  scam_spam: "Scam or Spam",
   other: "Other",
 };
 

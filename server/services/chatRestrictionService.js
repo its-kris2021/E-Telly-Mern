@@ -3,6 +3,15 @@ import ChatUserModerationProfile from "../models/ChatUserModerationProfile.js";
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+// Auto-moderation threshold: a message gets auto-resolved (same escalation
+// ladder as a manual "Send Warning") once this many *distinct* users report
+// it within the window — requiring multiple independent complainants makes
+// this much harder to abuse than a raw report count would be, since one
+// person re-reporting can never trigger it (MessageReport also enforces at
+// most one report per user per message).
+export const AUTO_RESTRICT_REPORTER_THRESHOLD = 3;
+export const AUTO_RESTRICT_WINDOW_MS = DAY_MS;
+
 // Escalation ladder. Index = violation number (1-based); every violation
 // past the 4th repeats the 7-day tier automatically — "permanent" is
 // deliberately never reached automatically, it's an admin-only manual action
@@ -63,6 +72,26 @@ export async function findProfilesWithExpiryApplied(userIds) {
   const profiles = await ChatUserModerationProfile.find({ userId: { $in: userIds } });
   await Promise.all(profiles.filter((p) => refreshExpiry(p)).map((p) => p.save()));
   return profiles;
+}
+
+// Proactively sweeps every currently-restricted profile for an expired
+// temporary restriction. The lazy paths above only fire when *something*
+// touches one specific profile (an admin opening a case, a resident hitting
+// /status, the web chat's message change-stream guard) — but the mobile
+// app's own restriction check reads the raw `restricted` field straight out
+// of the ChatUserModerationProfile document (see isChatRestricted in
+// etelly-mobile/lib/dbhelper/mongodb.dart) and never triggers any of those
+// lazy paths. Without this periodic sweep, a mobile-only user would stay
+// blocked indefinitely past their restriction's real expiry. Scheduled in
+// scripts/chatModerationScheduler.js.
+export async function runRestrictionExpiryCleanup() {
+  const candidates = await ChatUserModerationProfile.find({
+    restricted: true,
+    restrictionType: "temporary",
+  });
+  const expired = candidates.filter((p) => refreshExpiry(p));
+  await Promise.all(expired.map((p) => p.save()));
+  return expired.length;
 }
 
 // Lazily clears an expired temporary restriction so access is regained
@@ -140,6 +169,73 @@ export async function getRestrictionStatus(userId) {
   }
   if (refreshExpiry(profile)) await profile.save();
   return computeStatus(profile);
+}
+
+// Confirms a violation against `caseDoc` and resolves it — shared by the
+// admin "Send Warning" route and the auto-moderation threshold path, so the
+// escalation ladder (1st -> warning only, 2nd -> 24h, 3rd -> 3 days, 4th+ ->
+// 7 days) and the log/history shape are only ever implemented once.
+// `actorId` is null for a system-triggered call (CaseLogSchema.byId and
+// HistoryEntrySchema.byId both allow that) — actorName/actorRole should be
+// set to something like "System (auto-moderation)" / "system" in that case.
+export async function applyConfirmedViolation({ caseDoc, actorId, actorName, actorRole, note }) {
+  const now = new Date();
+  const baseEntry = {
+    caseId: caseDoc._id,
+    messageId: caseDoc.messageId,
+    byId: actorId,
+    byName: actorName,
+    byRole: actorRole,
+    at: now,
+  };
+
+  const profile = await getOrCreateProfile(caseDoc.reportedUserId);
+  // Clear a stale expired restriction first so this violation's escalation
+  // is computed against the user's real current state.
+  refreshExpiry(profile, now);
+  profile.warningCount += 1;
+  profile.history.push({ ...baseEntry, action: "warning_issued", note });
+  caseDoc.logs.push({
+    action: "warning_issued", byId: actorId, byName: actorName, byRole: actorRole,
+    at: now, notes: note,
+  });
+
+  // Permanent restriction is never applied automatically — that stays an
+  // admin-only manual action (see applyManualRestriction) for severe or
+  // repeated cases.
+  let restrictionJustApplied = false;
+  const tier = tierForViolationNumber(profile.warningCount);
+  if (tier.type === "temporary") {
+    profile.restricted = true;
+    profile.restrictedAt = now;
+    profile.restrictionType = "temporary";
+    profile.restrictionStartAt = now;
+    profile.restrictionEndAt = new Date(now.getTime() + tier.durationMs);
+    restrictionJustApplied = true;
+    const restrictionNote = `Automatically applied after violation #${profile.warningCount} (${tier.label} chat restriction)`;
+    profile.history.push({ ...baseEntry, action: "restriction_applied", note: restrictionNote });
+    caseDoc.logs.push({
+      action: "restriction_applied", byId: actorId, byName: actorName, byRole: actorRole,
+      at: now, notes: restrictionNote,
+    });
+  }
+
+  const resolveNote = restrictionJustApplied
+    ? `Resolved — Warning #${profile.warningCount} sent, Chat Restriction applied`
+    : `Resolved — Warning #${profile.warningCount} sent`;
+  caseDoc.status = "resolved";
+  caseDoc.reviewedBy = actorName;
+  caseDoc.reviewedAt = now;
+  caseDoc.logs.push({
+    action: "status_change", byId: actorId, byName: actorName, byRole: actorRole,
+    at: now, notes: resolveNote,
+  });
+  profile.history.push({ ...baseEntry, action: "case_resolved", note: resolveNote });
+
+  await profile.save();
+  await caseDoc.save();
+
+  return { profile, tier, restrictionJustApplied };
 }
 
 // Admin manual action — applies a restriction independent of the case/warn

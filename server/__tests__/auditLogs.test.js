@@ -49,7 +49,7 @@ async function seedChatDismissal() {
   await request(app)
     .post("/api/message-reports")
     .set("Authorization", `Bearer ${makeToken({ id: reporter._id.toString(), role: "user" })}`)
-    .send({ messageId: messageId.toString(), reason: "spam" });
+    .send({ messageId: messageId.toString(), reason: "scam_spam" });
 
   const adminToken = makeToken({ id: new mongoose.Types.ObjectId().toString(), name: "Admin Cruz", role: "system_admin" });
   await request(app)

@@ -55,4 +55,8 @@ const ChatUserModerationProfileSchema = new mongoose.Schema({
   history: { type: [HistoryEntrySchema], default: [] },
 }, { timestamps: true });
 
+// Used by the periodic restriction-expiry sweep (runRestrictionExpiryCleanup)
+// to find currently-restricted profiles without scanning the whole collection.
+ChatUserModerationProfileSchema.index({ restricted: 1, restrictionType: 1 });
+
 export default mongoose.model("ChatUserModerationProfile", ChatUserModerationProfileSchema);

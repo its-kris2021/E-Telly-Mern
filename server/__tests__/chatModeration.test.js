@@ -50,7 +50,7 @@ describe("POST /api/message-reports", () => {
     const res = await request(app)
       .post("/api/message-reports")
       .set("Authorization", `Bearer ${token}`)
-      .send({ messageId: messageId.toString(), reason: "spam" });
+      .send({ messageId: messageId.toString(), reason: "scam_spam" });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -58,7 +58,7 @@ describe("POST /api/message-reports", () => {
     const kase = await ChatModerationCase.findOne({ messageId });
     expect(kase).not.toBeNull();
     expect(kase.reportCount).toBe(1);
-    expect(kase.reasonCounts.spam).toBe(1);
+    expect(kase.reasonCounts.scam_spam).toBe(1);
     expect(kase.reportedUserBarangayKey).toBe("bagongnayon");
   });
 
@@ -71,7 +71,7 @@ describe("POST /api/message-reports", () => {
     await request(app)
       .post("/api/message-reports")
       .set("Authorization", `Bearer ${token}`)
-      .send({ messageId: messageId.toString(), reason: "spam" });
+      .send({ messageId: messageId.toString(), reason: "scam_spam" });
 
     const second = await request(app)
       .post("/api/message-reports")
@@ -96,17 +96,17 @@ describe("POST /api/message-reports", () => {
     await request(app)
       .post("/api/message-reports")
       .set("Authorization", `Bearer ${makeToken({ id: reporterA._id.toString(), role: "user" })}`)
-      .send({ messageId: messageId.toString(), reason: "threats" });
+      .send({ messageId: messageId.toString(), reason: "violence_self_harm" });
 
     await request(app)
       .post("/api/message-reports")
       .set("Authorization", `Bearer ${makeToken({ id: reporterB._id.toString(), role: "user" })}`)
-      .send({ messageId: messageId.toString(), reason: "spam" });
+      .send({ messageId: messageId.toString(), reason: "scam_spam" });
 
     const kase = await ChatModerationCase.findOne({ messageId });
     expect(kase.reportCount).toBe(2);
-    expect(kase.reasonCounts.threats).toBe(1);
-    expect(kase.reasonCounts.spam).toBe(1);
+    expect(kase.reasonCounts.violence_self_harm).toBe(1);
+    expect(kase.reasonCounts.scam_spam).toBe(1);
   });
 
   test("rejects an unauthenticated submission", async () => {
@@ -116,7 +116,7 @@ describe("POST /api/message-reports", () => {
 
     const res = await request(app)
       .post("/api/message-reports")
-      .send({ messageId: messageId.toString(), reason: "spam" });
+      .send({ messageId: messageId.toString(), reason: "scam_spam" });
 
     expect(res.status).toBe(401);
   });
@@ -162,7 +162,7 @@ describe("GET /api/chat-monitoring/cases — auth and role gating", () => {
 });
 
 describe("Barangay scoping and reporter privacy", () => {
-  async function seedCase({ address, reasons = ["spam"] }) {
+  async function seedCase({ address, reasons = ["scam_spam"] }) {
     const sender = await seedUser({ address });
     const reporters = await Promise.all(reasons.map(() => seedUser()));
     const messageId = await seedMessage({ senderId: sender._id, receiverId: reporters[0]._id, text: "reported text" });
@@ -219,7 +219,7 @@ describe("Barangay scoping and reporter privacy", () => {
   });
 
   test("reporter identity is included only for system_admin, never for cdrrmo or barangay_official", async () => {
-    const { messageId, reporters } = await seedCase({ address: "Bagong Nayon", reasons: ["spam", "harassment"] });
+    const { messageId, reporters } = await seedCase({ address: "Bagong Nayon", reasons: ["scam_spam", "harassment"] });
 
     const adminToken = makeToken({ id: new mongoose.Types.ObjectId().toString(), role: "system_admin" });
     const adminRes = await request(app)
@@ -260,8 +260,101 @@ describe("Barangay scoping and reporter privacy", () => {
   });
 });
 
+describe("Auto-moderation: distinct-reporter threshold", () => {
+  test("3 distinct reporters on the same message auto-resolve the case and issue warning #1", async () => {
+    const sender = await seedUser({ address: "Bagong Nayon" });
+    const reporters = await Promise.all([seedUser(), seedUser(), seedUser()]);
+    const messageId = await seedMessage({ senderId: sender._id, receiverId: reporters[0]._id });
+
+    for (const reporter of reporters) {
+      await request(app)
+        .post("/api/message-reports")
+        .set("Authorization", `Bearer ${makeToken({ id: reporter._id.toString(), role: "user" })}`)
+        .send({ messageId: messageId.toString(), reason: "harassment" });
+    }
+
+    const kase = await ChatModerationCase.findOne({ messageId });
+    expect(kase.status).toBe("resolved");
+    expect(kase.logs.map((l) => l.action)).toEqual(["warning_issued", "status_change"]);
+    expect(kase.logs[0].byId).toBeNull();
+    expect(kase.logs[0].byName).toBe("System (auto-moderation)");
+
+    const profile = await ChatUserModerationProfile.findOne({ userId: sender._id });
+    expect(profile.warningCount).toBe(1);
+    expect(profile.restricted).toBe(false);
+  });
+
+  test("only 2 distinct reporters does not auto-resolve the case", async () => {
+    const sender = await seedUser();
+    const reporters = await Promise.all([seedUser(), seedUser()]);
+    const messageId = await seedMessage({ senderId: sender._id, receiverId: reporters[0]._id });
+
+    for (const reporter of reporters) {
+      await request(app)
+        .post("/api/message-reports")
+        .set("Authorization", `Bearer ${makeToken({ id: reporter._id.toString(), role: "user" })}`)
+        .send({ messageId: messageId.toString(), reason: "scam_spam" });
+    }
+
+    const kase = await ChatModerationCase.findOne({ messageId });
+    expect(kase.status).toBe("pending");
+
+    const profile = await ChatUserModerationProfile.findOne({ userId: sender._id });
+    expect(profile).toBeNull();
+  });
+
+  test("a case already auto-resolved by the threshold can no longer be manually warned", async () => {
+    const sender = await seedUser({ address: "Bagong Nayon" });
+    const reporters = await Promise.all([seedUser(), seedUser(), seedUser()]);
+    const messageId = await seedMessage({ senderId: sender._id, receiverId: reporters[0]._id });
+
+    for (const reporter of reporters) {
+      await request(app)
+        .post("/api/message-reports")
+        .set("Authorization", `Bearer ${makeToken({ id: reporter._id.toString(), role: "user" })}`)
+        .send({ messageId: messageId.toString(), reason: "violence_self_harm" });
+    }
+
+    const token = makeToken({ id: new mongoose.Types.ObjectId().toString(), role: "cdrrmo" });
+    const res = await request(app)
+      .post(`/api/chat-monitoring/cases/${messageId}/warn`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  test("a 2nd auto-triggered violation for the same user (different message) applies a temporary restriction", async () => {
+    const sender = await seedUser({ address: "Bagong Nayon" });
+
+    // First violation, auto-triggered on message A.
+    const reportersA = await Promise.all([seedUser(), seedUser(), seedUser()]);
+    const messageA = await seedMessage({ senderId: sender._id, receiverId: reportersA[0]._id });
+    for (const reporter of reportersA) {
+      await request(app)
+        .post("/api/message-reports")
+        .set("Authorization", `Bearer ${makeToken({ id: reporter._id.toString(), role: "user" })}`)
+        .send({ messageId: messageA.toString(), reason: "scam_spam" });
+    }
+
+    // Second violation, auto-triggered on message B.
+    const reportersB = await Promise.all([seedUser(), seedUser(), seedUser()]);
+    const messageB = await seedMessage({ senderId: sender._id, receiverId: reportersB[0]._id });
+    for (const reporter of reportersB) {
+      await request(app)
+        .post("/api/message-reports")
+        .set("Authorization", `Bearer ${makeToken({ id: reporter._id.toString(), role: "user" })}`)
+        .send({ messageId: messageB.toString(), reason: "scam_spam" });
+    }
+
+    const profile = await ChatUserModerationProfile.findOne({ userId: sender._id });
+    expect(profile.warningCount).toBe(2);
+    expect(profile.restricted).toBe(true);
+    expect(profile.restrictionType).toBe("temporary");
+  });
+});
+
 describe("Admin review: warnings, restriction, dismissal", () => {
-  async function seedReportedCase({ address = "Bagong Nayon", reason = "bullying", sender } = {}) {
+  async function seedReportedCase({ address = "Bagong Nayon", reason = "harassment", sender } = {}) {
     const actualSender = sender || (await seedUser({ address }));
     const reporter = await seedUser();
     const messageId = await seedMessage({ senderId: actualSender._id, receiverId: reporter._id });
@@ -293,7 +386,7 @@ describe("Admin review: warnings, restriction, dismissal", () => {
 
   test("a 2nd confirmed violation on a different case for the same user auto-applies Chat Restriction", async () => {
     const sender = await seedUser({ address: "Bagong Nayon" });
-    const { messageId: firstMessageId } = await seedReportedCase({ sender, reason: "spam" });
+    const { messageId: firstMessageId } = await seedReportedCase({ sender, reason: "scam_spam" });
     const { messageId: secondMessageId } = await seedReportedCase({ sender, reason: "harassment" });
 
     const token = makeToken({ id: new mongoose.Types.ObjectId().toString(), role: "cdrrmo" });
@@ -336,7 +429,7 @@ describe("Admin review: warnings, restriction, dismissal", () => {
     await request(app)
       .post("/api/message-reports")
       .set("Authorization", `Bearer ${makeToken({ id: reporterA._id.toString(), role: "user" })}`)
-      .send({ messageId: messageId.toString(), reason: "spam" });
+      .send({ messageId: messageId.toString(), reason: "scam_spam" });
     await request(app)
       .post("/api/message-reports")
       .set("Authorization", `Bearer ${makeToken({ id: reporterB._id.toString(), role: "user" })}`)

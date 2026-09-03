@@ -23,7 +23,9 @@ const ModeratorNoteSchema = new mongoose.Schema(
 const CaseLogSchema = new mongoose.Schema(
   {
     action: { type: String, required: true },
-    byId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    // Optional: entries written by the auto-moderation threshold (see
+    // maybeAutoRestrict in routes/messageReports.js) have no logged-in actor.
+    byId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     byName: { type: String, required: true },
     byRole: { type: String, required: true },
     at: { type: Date, default: Date.now },

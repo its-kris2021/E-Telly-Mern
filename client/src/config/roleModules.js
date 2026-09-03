@@ -8,11 +8,11 @@ import {
   MapPin,
   Users,
   BookOpen,
-  ShieldAlert,
-  History,
   Sparkles,
   LayoutDashboard,
+  Monitor,
 } from "lucide-react";
+import { LuLogs } from "react-icons/lu";
 
 export const ROLE_LABELS = {
   system_admin: "System Admin",
@@ -33,8 +33,8 @@ export const ROLE_NAV_ITEMS = {
   // access.
   system_admin: [
     { icon: Users, label: "User Management", href: "/manage-users" },
-    { icon: ShieldAlert, label: "Chat Monitoring", href: "/chat-monitoring" },
-    { icon: History, label: "Audit Logs", href: "/audit-logs" },
+    { icon: Monitor, label: "Chat Monitoring", href: "/chat-monitoring" },
+    { icon: LuLogs, label: "Audit Logs", href: "/audit-logs" },
     { icon: Sparkles, label: "AI Model Performance", href: "/model-performance" },
   ],
   // CDRRMO — full city-wide disaster-ops access (all barangays).

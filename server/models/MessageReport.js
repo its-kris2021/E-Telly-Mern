@@ -1,15 +1,11 @@
 import mongoose from "mongoose";
 
 export const REPORT_REASONS = [
-  "spam",
-  "abusive",
-  "bullying",
   "harassment",
-  "threats",
   "hate_speech",
-  "inappropriate_content",
-  "scam",
-  "violence",
+  "violence_self_harm",
+  "sexual_content",
+  "scam_spam",
   "other",
 ];
 

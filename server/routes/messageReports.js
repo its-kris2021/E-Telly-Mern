@@ -4,6 +4,12 @@ import { protect } from "../middleware/auth.js";
 import MessageReport, { REPORT_REASONS } from "../models/MessageReport.js";
 import ChatModerationCase from "../models/ChatModerationCase.js";
 import { resolveBarangayKey } from "../config/barangays.js";
+import {
+  applyConfirmedViolation,
+  AUTO_RESTRICT_REPORTER_THRESHOLD,
+  AUTO_RESTRICT_WINDOW_MS,
+} from "../services/chatRestrictionService.js";
+import { sendPushToUser } from "./push.js";
 
 const router = express.Router();
 
@@ -56,6 +62,61 @@ async function upsertModerationCase(message, reason) {
   );
 }
 
+// Auto-resolves a still-pending case the moment enough *distinct* users have
+// reported it recently — same escalation ladder as a human moderator's "Send
+// Warning" click (see applyConfirmedViolation), just without waiting for one.
+// Requiring several independent reporters within a short window (rather than
+// a raw lifetime report count) makes this hard to abuse: one person can only
+// ever file one report per message (unique index in MessageReport), so a
+// single bad-faith account can't trigger it alone.
+async function maybeAutoRestrict(messageId) {
+  const since = new Date(Date.now() - AUTO_RESTRICT_WINDOW_MS);
+  const distinctReporters = await MessageReport.distinct("reporterId", {
+    messageId,
+    createdAt: { $gte: since },
+  });
+  if (distinctReporters.length < AUTO_RESTRICT_REPORTER_THRESHOLD) return;
+
+  // Atomically flip pending -> resolved first so two reports landing at
+  // nearly the same moment can't both win the race and double-apply the
+  // violation. Only the request that actually performed this flip proceeds.
+  const caseDoc = await ChatModerationCase.findOneAndUpdate(
+    { messageId, status: "pending" },
+    { $set: { status: "resolved" } },
+  );
+  if (!caseDoc || !caseDoc.reportedUserId) return;
+
+  const note = `Automatically resolved — ${distinctReporters.length} distinct users reported this message within 24 hours`;
+  const { profile, restrictionJustApplied } = await applyConfirmedViolation({
+    caseDoc,
+    actorId: null,
+    actorName: "System (auto-moderation)",
+    actorRole: "system",
+    note,
+  });
+
+  const reports = await MessageReport.find({ messageId }).select("reporterId").lean();
+  Promise.allSettled(
+    reports.map((r) => sendPushToUser(r.reporterId, {
+      title: "Report reviewed",
+      body: "Thanks for the report — multiple users flagged this message and it was automatically reviewed.",
+      url: "/chats",
+      tag: `chat-report-${caseDoc._id}`,
+    })),
+  ).catch((err) => console.error("[MessageReports] auto-restrict reporter notification failed:", err.message));
+
+  const warnedBody = restrictionJustApplied
+    ? `Your message was found to violate community guidelines after multiple reports (warning #${profile.warningCount}). Chat access is temporarily restricted.`
+    : `Your message was found to violate community guidelines after multiple reports (warning #${profile.warningCount}). Further violations may restrict your chat access.`;
+  sendPushToUser(caseDoc.reportedUserId, {
+    title: "Chat warning issued",
+    body: warnedBody,
+    url: "/chats",
+    tag: `chat-warning-${caseDoc._id}`,
+    urgent: restrictionJustApplied,
+  }).catch((err) => console.error("[MessageReports] auto-restrict warned-user notification failed:", err.message));
+}
+
 // POST /api/message-reports - report a chat message for abuse
 router.post("/", protect, async (req, res) => {
   try {
@@ -90,6 +151,14 @@ router.post("/", protect, async (req, res) => {
     });
 
     await upsertModerationCase(message, reason);
+
+    try {
+      await maybeAutoRestrict(message._id);
+    } catch (err) {
+      // The report itself already succeeded — a failed auto-moderation
+      // check shouldn't turn that into an error response.
+      console.error("[MessageReports] auto-restrict check failed:", err.message);
+    }
 
     res.status(201).json({ success: true, report });
   } catch (err) {
