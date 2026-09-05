@@ -21,6 +21,11 @@ function signJwt(user) {
 }
 
 function logLogin(user, method) {
+  // Residents (role "user") log in far more often than staff and aren't
+  // subject to the audit trail's oversight purpose — only login activity
+  // for barangay officials, CDRRMO, and system admins belongs here.
+  if (user.role === "user") return;
+
   return recordAuditLog({
     domain: "login",
     action: "login",
