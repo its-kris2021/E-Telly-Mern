@@ -7,6 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // Default "auto" injects <script src="/registerSW.js"> with no
+      // defer/async, which blocks HTML parsing until it's fetched and
+      // competes with the main JS bundle for one of HTTP/1.1's 6
+      // connections-per-host slots. "inline" writes the ~10-line
+      // registration snippet directly into index.html instead.
+      injectRegister: "inline",
       strategies: "injectManifest",
       srcDir: "src",
       filename: "sw.js",
