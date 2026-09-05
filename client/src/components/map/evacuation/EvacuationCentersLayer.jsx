@@ -182,6 +182,10 @@ const COORDS = {
 };
 
 function statusOf(center) {
+  // Availability is a separate on/off flag from occupancy (see EvacuationPage's
+  // "Unavailable" badge, shown alongside its own occupancy status) — a closed
+  // center should read as closed on the map regardless of how full it is.
+  if (center.available === false) return "closed";
   if (!center.capacity || center.occupancy === 0) return "vacant";
   const pct = center.occupancy / center.capacity;
   if (pct >= 1) return "full";
@@ -194,6 +198,7 @@ const STATUS_COLOR = {
   nearFull: "#f97316",
   active: "#22c55e",
   vacant: "#94a3b8",
+  closed: "#475569",
 };
 
 const STATUS_LABEL = {
@@ -201,6 +206,7 @@ const STATUS_LABEL = {
   nearFull: "Near Full",
   active: "Active",
   vacant: "Vacant",
+  closed: "Closed",
 };
 
 const TENT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15 8.5 21"/><path d="M2 21h20"/></svg>`;
