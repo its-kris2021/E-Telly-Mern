@@ -33,16 +33,31 @@ async function readAlertsCache() {
   } catch { return null; }
 }
 
-async function writeAlertsCache(alerts) {
+async function writeAlertsCache(alerts, counts) {
   try {
     const db = await openAlertsDB();
     await new Promise((resolve) => {
       const tx = db.transaction(IDB_STORE, "readwrite");
-      tx.objectStore(IDB_STORE).put({ alerts, cachedAt: Date.now() }, "latest");
+      tx.objectStore(IDB_STORE).put({ alerts, counts, cachedAt: Date.now() }, "latest");
       tx.oncomplete = resolve;
       tx.onerror    = resolve;
     });
   } catch { /* non-critical */ }
+}
+
+// Fallback for cache entries written before counts were served by the API,
+// or if the API response is ever missing counts — undercounts once active
+// alerts exceed the 50-item list cap, but keeps the UI from breaking.
+function computeCountsFromList(raw) {
+  return (raw ?? []).reduce(
+    (acc, a) => {
+      if (a.type === "rescue") acc.rescue = (acc.rescue ?? 0) + 1;
+      else acc[a.severity] = (acc[a.severity] ?? 0) + 1;
+      acc.total += 1;
+      return acc;
+    },
+    { evacuate: 0, critical: 0, warning: 0, watch: 0, rescue: 0, total: 0 },
+  );
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────
@@ -145,6 +160,7 @@ export const RESCUE_CONFIG = {
 
 export function useAlerts() {
   const [alerts,       setAlerts]       = useState([]);
+  const [counts,       setCounts]       = useState({ evacuate: 0, critical: 0, warning: 0, watch: 0, rescue: 0, total: 0 });
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
   const [isStale,      setIsStale]      = useState(false);
@@ -169,16 +185,19 @@ export function useAlerts() {
       const data = await res.json();
 
       const sorted = sortAlerts(data.alerts);
+      const nextCounts = data.counts ?? computeCountsFromList(sorted);
       setAlerts(sorted);
+      setCounts(nextCounts);
       setError(null);
       setIsStale(false);
       setLastFetched(new Date());
-      writeAlertsCache(sorted); // fire-and-forget
+      writeAlertsCache(sorted, nextCounts); // fire-and-forget
     } catch (err) {
       // Network failed — try the local cache so the user still sees data
       const cached = await readAlertsCache();
       if (cached?.alerts?.length) {
         setAlerts(cached.alerts);
+        setCounts(cached.counts ?? computeCountsFromList(cached.alerts));
         setIsStale(true);
         setError(null);
       } else {
@@ -194,6 +213,7 @@ export function useAlerts() {
     readAlertsCache().then((cached) => {
       if (cached?.alerts?.length) {
         setAlerts(cached.alerts);
+        setCounts(cached.counts ?? computeCountsFromList(cached.alerts));
         setIsStale(true);
         setLoading(false);
       }
@@ -264,16 +284,6 @@ export function useAlerts() {
   }, [fetchAlerts, cooldownSecs]);
 
   useEffect(() => () => clearInterval(cooldownRef.current), []);
-
-  const counts = alerts.reduce(
-    (acc, a) => {
-      if (a.type === "rescue") acc.rescue = (acc.rescue ?? 0) + 1;
-      else acc[a.severity] = (acc[a.severity] ?? 0) + 1;
-      acc.total += 1;
-      return acc;
-    },
-    { evacuate: 0, critical: 0, warning: 0, watch: 0, rescue: 0, total: 0 },
-  );
 
   return { alerts, loading, error, isStale, lastFetched, dismiss, refresh, cooldownSecs, counts };
 }

@@ -21,17 +21,73 @@ function rejectIfAlertOutsideAssignedBarangay(req, res, alert) {
   return false;
 }
 
-// GET /api/alerts — fetch all active alerts, sorted by severity then time
+// GET /api/alerts — fetch active alerts (list capped at 50, newest first),
+// plus true totals across ALL matching alerts so counters don't get stuck
+// at the list cap once active alerts exceed it.
 router.get("/", async (req, res) => {
   try {
     const now = new Date();
-    const alerts = await Alert.find({
+    const matchQuery = {
       isActive: true,
       $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
-    })
-      .sort({ createdAt: -1 })
-      .limit(50);
-    res.json({ alerts, generatedAt: new Date().toISOString() });
+    };
+
+    const [alerts, countsAgg] = await Promise.all([
+      Alert.find(matchQuery).sort({ createdAt: -1 }).limit(50),
+      Alert.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            rescue: { $sum: { $cond: [{ $eq: ["$type", "rescue"] }, 1, 0] } },
+            evacuate: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ["$type", "rescue"] }, { $eq: ["$severity", "evacuate"] }] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            critical: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ["$type", "rescue"] }, { $eq: ["$severity", "critical"] }] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            warning: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ["$type", "rescue"] }, { $eq: ["$severity", "warning"] }] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            watch: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ["$type", "rescue"] }, { $eq: ["$severity", "watch"] }] },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const counts = countsAgg[0]
+      ? { ...countsAgg[0], _id: undefined }
+      : { total: 0, rescue: 0, evacuate: 0, critical: 0, warning: 0, watch: 0 };
+    delete counts._id;
+
+    res.json({ alerts, counts, generatedAt: new Date().toISOString() });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch alerts" });
   }
