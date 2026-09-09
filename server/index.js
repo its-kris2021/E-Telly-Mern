@@ -13,7 +13,7 @@ import hazardRoutes from "./routes/hazard.js";
 import alertRoutes from "./routes/alerts.js";
 import reportRoutes from "./routes/reports.js";
 import evacuationRoutes from "./routes/evacuation.js";
-import pushRoutes, { sendNotificationToAll, sendAdminNotification, sendPushToUser } from "./routes/push.js";
+import pushRoutes, { sendAdminNotification, sendPushToUser } from "./routes/push.js";
 import syncRoutes from "./routes/sync.js";
 import uploadImagesRoutes from "./routes/uploadImages.js";
 import adminMetricsRoutes from "./routes/adminMetrics.js";
@@ -363,15 +363,6 @@ app.post("/api/reports/update-status", protect, requireRole("system_admin", "cdr
           ...(signed ? { signature: signed.signature, keyId: signed.keyId } : {}),
         });
         io.emit("new_alert", savedAlert.toObject());
-
-        const isUrgent = alertSeverity === "evacuate" || alertSeverity === "critical";
-        sendNotificationToAll({
-          title: `Alert: Community Report — ${typeName}`,
-          body: `${savedAlert.location}: ${savedAlert.description.slice(0, 100)}`,
-          url: "/alerts",
-          tag: `community-report-${reportId}`,
-          urgent: isUrgent,
-        }).catch((err) => console.error("[Push] Approved report alert push failed:", err));
       }
 
       res.json({ success: true });
