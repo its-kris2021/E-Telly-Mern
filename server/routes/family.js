@@ -208,6 +208,14 @@ router.post("/invites/:id/accept", protect, async (req, res) => {
     invite.respondedAt = new Date();
     await invite.save();
 
+    // The owner's Profile screen already listens for this (see mobile
+    // ProfileScreen._initLiveUpdates) to silently re-fetch — reused here so
+    // "pending" flips to "accepted" live instead of needing a manual
+    // refresh. Targeted at the owner's room only, not a global broadcast.
+    req.app.get("io")?.to(`user-${family.owner}`).emit("profile_updated", {
+      userId: String(family.owner),
+    });
+
     res.json({ message: "You've joined the family." });
   } catch (err) {
     console.error("[Family] Accept invite error:", err.message);
@@ -237,6 +245,10 @@ router.post("/invites/:id/decline", protect, async (req, res) => {
     invite.status = "declined";
     invite.respondedAt = new Date();
     await invite.save();
+
+    req.app.get("io")?.to(`user-${invite.inviter}`).emit("profile_updated", {
+      userId: String(invite.inviter),
+    });
 
     res.json({ message: "Invite declined." });
   } catch (err) {

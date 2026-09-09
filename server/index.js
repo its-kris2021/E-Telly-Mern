@@ -190,6 +190,15 @@ io.on("connection", (socket) => {
     if (requestId) socket.join(`request-${requestId}`);
   });
 
+  // Profile edits are written straight from the mobile app to MongoDB (no
+  // REST route involved), so there's no request handler here to emit this
+  // from — the saving device signals it itself, and we relay it only to
+  // that user's OTHER sessions (socket.to excludes the sender, which
+  // already has the data it just saved).
+  socket.on("profile_updated", ({ userId }) => {
+    if (userId) socket.to(`user-${userId}`).emit("profile_updated", { userId });
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
   });
