@@ -348,6 +348,14 @@ router.delete("/members/:userId", protect, async (req, res) => {
     );
     await family.save();
 
+    // The removed member's own Profile shows this family under "Family
+    // Members" too (see mobile ProfileScreen — isInviter entries). Tell
+    // their session to drop it live instead of leaving a stale entry until
+    // they happen to reopen the screen.
+    req.app.get("io")?.to(`user-${req.params.userId}`).emit("profile_updated", {
+      userId: req.params.userId,
+    });
+
     res.json({ message: "Family member removed." });
   } catch (err) {
     console.error("[Family] Remove member error:", err.message);
