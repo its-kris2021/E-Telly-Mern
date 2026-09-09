@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
-import { sendNotificationToAll } from "../routes/push.js";
+import { sendAdminNotification } from "../routes/push.js";
+import { sendFCMToBarangays } from "./fcm.js";
 import { signAlert } from "./alertSigning.js";
 
 export function toDateKey() {
@@ -77,13 +78,20 @@ export async function upsertSystemAlert(data) {
 
   if (isNew) {
     const prefix = SEVERITY_PREFIX[data.severity] ?? "⚠️ Alert";
-    sendNotificationToAll({
+    const pushPayload = {
       title:  `${prefix}: ${data.title}`,
       body:   data.description.slice(0, 100),
       url:    "/alerts",
       tag:    `system-${data._dedupeKey}`,
       urgent: data.severity === "evacuate" || data.severity === "critical",
-    }).catch((err) => console.error("[Push] System alert push failed:", err.message));
+    };
+    // These are always single-barangay alerts (see floodAlerts.js/landslideAlerts.js
+    // callers) — scope the push so only that barangay's official/residents get it.
+    const barangays = data.barangays ?? [];
+    sendAdminNotification(pushPayload, barangays)
+      .catch((err) => console.error("[Push] System alert admin push failed:", err.message));
+    sendFCMToBarangays(pushPayload, barangays)
+      .catch((err) => console.error("[Push] System alert FCM push failed:", err.message));
   }
 
   return isNew;
@@ -98,13 +106,18 @@ export async function upsertAiAlert(data) {
 
   if (isNew) {
     const barangayName = data.barangays?.[0] ?? "your area";
-    sendNotificationToAll({
+    const pushPayload = {
       title: `AI Prediction: ${data.title}`,
       body: `Elevated ${data.type} risk detected in ${barangayName} — not yet confirmed. Tap for details.`,
       url: "/hazard-map",
       tag: `ai-${data._dedupeKey}`,
       urgent: false,
-    }).catch((err) => console.error("[Push] AI alert push failed:", err.message));
+    };
+    const barangays = data.barangays ?? [];
+    sendAdminNotification(pushPayload, barangays)
+      .catch((err) => console.error("[Push] AI alert admin push failed:", err.message));
+    sendFCMToBarangays(pushPayload, barangays)
+      .catch((err) => console.error("[Push] AI alert FCM push failed:", err.message));
   }
 
   return isNew;

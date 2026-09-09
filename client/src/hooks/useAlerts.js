@@ -180,7 +180,9 @@ export function useAlerts() {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/alerts`);
+      const res = await fetch(`${API_BASE}/api/alerts`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
+      });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
 

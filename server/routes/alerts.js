@@ -2,9 +2,15 @@
 import express from "express";
 import mongoose from "mongoose";
 import Alert from "../models/Alert.js";
-import { protect, requireRole } from "../middleware/auth.js";
-import { sendNotificationToAll } from "./push.js";
+import { protect, requireRole, optionalProtect } from "../middleware/auth.js";
+import { sendAdminNotification } from "./push.js";
+import { sendFCMToBarangays } from "../services/fcm.js";
 import { signAlert } from "../services/alertSigning.js";
+import User from "../models/user.js";
+import { resolveBarangayKey } from "../config/barangays.js";
+import { isOpsRole } from "../config/roles.js";
+
+const NON_RESIDENT_ROLES = ["system_admin", "admin"]; // ops roles come from isOpsRole()
 
 const router = express.Router();
 
@@ -24,13 +30,46 @@ function rejectIfAlertOutsideAssignedBarangay(req, res, alert) {
 // GET /api/alerts — fetch active alerts (list capped at 50, newest first),
 // plus true totals across ALL matching alerts so counters don't get stuck
 // at the list cap once active alerts exceed it.
-router.get("/", async (req, res) => {
+// optionalProtect (not requireRole) because this is also hit anonymously —
+// a barangay_official's or resident's token, when present, narrows the
+// result to their own barangay + city-wide alerts; every other caller
+// (no token, CDRRMO, system_admin) sees everything.
+router.get("/", optionalProtect, async (req, res) => {
   try {
     const now = new Date();
     const matchQuery = {
       isActive: true,
-      $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+      $and: [{ $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] }],
     };
+
+    // Their own barangay's alerts, plus city-wide ones (empty barangays
+    // array = applies everywhere, e.g. a citywide CDRRMO typhoon alert).
+    if (req.user?.role === "barangay_official" && req.user.assignedBarangay) {
+      matchQuery.$and.push({
+        $or: [{ barangays: req.user.assignedBarangay }, { barangays: { $size: 0 } }],
+      });
+    } else if (
+      req.user &&
+      !isOpsRole(req.user.role) &&
+      !NON_RESIDENT_ROLES.includes(req.user.role)
+    ) {
+      // Anyone who isn't ops/admin is treated as a resident — DB role
+      // values for citizen accounts aren't consistent ("user" vs a stray
+      // "resident" seen on at least one account), so this checks by
+      // exclusion instead of allowlisting one exact string.
+      // Residents have no structured barangay field on their JWT (only
+      // id/name/role/assignedBarangay are signed in — see auth.js's
+      // signJwt), so their barangay is resolved from their profile's
+      // free-text address at request time, same heuristic reports.js uses
+      // for reporterBarangayKey.
+      const resident = await User.findById(req.user.id).select("barangay address").lean();
+      const residentBarangay = resolveBarangayKey(resident?.barangay) ?? resolveBarangayKey(resident?.address);
+      if (residentBarangay) {
+        matchQuery.$and.push({
+          $or: [{ barangays: residentBarangay }, { barangays: { $size: 0 } }],
+        });
+      }
+    }
 
     const [alerts, countsAgg] = await Promise.all([
       Alert.find(matchQuery).sort({ createdAt: -1 }).limit(50),
@@ -172,13 +211,22 @@ router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req
     io?.emit("new_alert", alert.toObject());
 
     const isRescue = type === "rescue";
-    sendNotificationToAll({
+    const pushPayload = {
       title: isRescue ? "🚨 Rescue Alert" : `⚠️ ${title}`,
       body:  description,
       url:   "/alerts",
       tag:   `alert-${alert._id}`,
       urgent: isRescue,
-    }).catch((err) => console.error("[Push] sendNotificationToAll failed:", err));
+    };
+    // Both ops (web/VAPID) and resident (mobile/FCM) channels are scoped to
+    // the alert's barangays — a barangay_official or resident outside the
+    // alert's barangays doesn't get pushed a notification for it. CDRRMO
+    // always gets everything; an empty barangays array (citywide alert)
+    // falls back to notifying everyone on both channels.
+    sendAdminNotification(pushPayload, effectiveBarangays)
+      .catch((err) => console.error("[Push] sendAdminNotification failed:", err));
+    sendFCMToBarangays(pushPayload, effectiveBarangays)
+      .catch((err) => console.error("[Push] sendFCMToBarangays failed:", err));
 
     if (isManual) {
       const db = mongoose.connection.db;

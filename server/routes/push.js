@@ -140,11 +140,16 @@ export async function sendPushToUser(userId, payload) {
 // Sends exclusively to CDRRMO/barangay_official subscribers so residents
 // (and System Admin, which has no disaster-ops role) are not spammed with
 // operational CDRRMO tasks.
-export async function sendAdminNotification(payload) {
+// `barangays`: when non-empty, only barangay_official subscribers whose
+// assignedBarangay is in the list get notified (CDRRMO stays unscoped,
+// same as read-side access). Empty array = citywide, notifies every ops user.
+export async function sendAdminNotification(payload, barangays = []) {
   initVapid();
-  const adminUsers = await User.find({
-    role: { $in: OPS_ROLES },
-  }).select("_id").lean();
+  const roleQuery =
+    barangays.length > 0
+      ? { $or: [{ role: "cdrrmo" }, { role: "barangay_official", assignedBarangay: { $in: barangays } }] }
+      : { role: { $in: OPS_ROLES } };
+  const adminUsers = await User.find(roleQuery).select("_id").lean();
   const adminIds = adminUsers.map((u) => u._id);
   const subs = await PushSubscription.find({ userId: { $in: adminIds } });
   console.log(`[Push] Sending admin notification to ${subs.length} admin subscriber(s)`);

@@ -68,9 +68,17 @@ async function runSystemChecks() {
   console.log("[AlertEngine] Running system checks…", new Date().toISOString());
   // Expiry cleanup runs first so stale alerts are gone before new ones are scored.
   await runExpiryCleanup();
-  await runFloodEvacuationCheck(); // warms rainfall-hourly + landslide cache
-  await runHeavyRainfallCheck();   // reuses warm cache
-  await runLandslideCheck();       // reuses warm cache from flood check above
+  // Wrapped like runDailyRetrain/runExpiryCleanup below — an upstream
+  // Open-Meteo outage/timeout must not crash the whole process (this runs
+  // from a bare setTimeout/cron.schedule callback with no caller to catch
+  // it), just get logged and wait for the next scheduled tick.
+  try {
+    await runFloodEvacuationCheck(); // warms rainfall-hourly + landslide cache
+    await runHeavyRainfallCheck();   // reuses warm cache
+    await runLandslideCheck();       // reuses warm cache from flood check above
+  } catch (err) {
+    console.error("[AlertEngine] System checks failed:", err.message);
+  }
 }
 
 async function runAgencyChecks() {
