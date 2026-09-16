@@ -231,6 +231,14 @@ router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req
     if (isManual) {
       const db = mongoose.connection.db;
       const severityMap = { evacuate: "high", warning: "medium", watch: "low" };
+      // A report has a single barangay key but an alert can target several
+      // (or none, for citywide) — only the single-barangay case maps
+      // unambiguously onto scopeToAssignedBarangay's equality match. Leave
+      // it null for citywide/multi-barangay alerts (CDRRMO-only visibility
+      // on the Reports page, same conservative fallback used elsewhere for
+      // reports with no resolvable barangay) rather than guess which one
+      // barangay_official should see it.
+      const linkedBarangayKey = effectiveBarangays.length === 1 ? effectiveBarangays[0] : null;
       const reportDoc = {
         emergencyType: type ?? "other",
         severity:      severityMap[effectiveSeverity] ?? "medium",
@@ -243,6 +251,8 @@ router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req
         status:    "approved",
         isAlertLinked: true,
         linkedAlertId: alert._id,
+        barangayKey: linkedBarangayKey,
+        reporterBarangayKey: linkedBarangayKey,
         images: [],
         logs: [{
           action: "approved",
