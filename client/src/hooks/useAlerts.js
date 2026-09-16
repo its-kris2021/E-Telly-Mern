@@ -3,7 +3,7 @@ import { connectSocket } from "../utils/socket";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
-  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
+  : (import.meta.env?.VITE_API_BASE ?? `http://${window.location.hostname}:5000`);
 const REFRESH_COOLDOWN = 10; // seconds — anti-spam only, not rate-limiting
 
 // rescue type always sorts first, then by severity

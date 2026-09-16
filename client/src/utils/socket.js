@@ -2,7 +2,7 @@ import io from "socket.io-client";
 
 const SOCKET_URL = import.meta.env.PROD
   ? window.location.origin
-  : (import.meta.env.VITE_API_BASE ?? "http://localhost:5000");
+  : (import.meta.env.VITE_API_BASE ?? `http://${window.location.hostname}:5000`);
 
 let socket = null;
 

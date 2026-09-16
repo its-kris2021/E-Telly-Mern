@@ -16,7 +16,7 @@ set LOCAL_MODE=true
 set MONGO_URI=mongodb://localhost:27017/etelly_local
 set LOCAL_MONGO_URI=mongodb://localhost:27017/etelly_local
 set BARANGAY_NAME=Bagong Nayon
-set CLOUD_SYNC_URL=https://e-telly-ca75b10e9536.herokuapp.com/api/sync/receive-batch
+set CLOUD_SYNC_URL=https://e-tellyph-098347559c3c.herokuapp.com/api/sync/receive-batch
 set SYNC_SECRET=etelly_sync_9xK2mPqL7vR4nJ8w
 node index.js
 pause

@@ -6,7 +6,7 @@ import { BARANGAY_OPTIONS, barangayLabel } from "../config/barangays";
 
 const API_BASE  = import.meta.env.PROD
   ? window.location.origin
-  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
+  : (import.meta.env?.VITE_API_BASE ?? `http://${window.location.hostname}:5000`);
 const PAGE_SIZE = 7;
 
 // Residents are never created/managed here — self-registration is mobile-only.

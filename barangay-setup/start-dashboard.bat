@@ -9,7 +9,6 @@ echo.
 echo Starting dashboard... do not close this window.
 echo.
 cd /d "%~dp0..\client"
-set VITE_API_BASE=http://localhost:5000
 set VITE_LOCAL_MODE=true
 npx vite --host
 pause

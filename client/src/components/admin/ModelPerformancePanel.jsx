@@ -8,7 +8,7 @@ import { ChevronDown, ChevronUp, Sparkles, RefreshCw } from "lucide-react";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
-  : (import.meta.env?.VITE_API_BASE ?? "http://localhost:5000");
+  : (import.meta.env?.VITE_API_BASE ?? `http://${window.location.hostname}:5000`);
 
 function fmtPct(v) {
   return v == null ? "—" : `${Math.round(v * 100)}%`;
