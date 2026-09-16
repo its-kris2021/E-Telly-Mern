@@ -3,7 +3,7 @@
 // Only routes/pages that exist today are listed here.
 import {
   Bell,
-  Volume2,
+  Siren,
   Map,
   MapPin,
   Users,
@@ -41,7 +41,7 @@ export const ROLE_NAV_ITEMS = {
   cdrrmo: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Bell, label: "Alerts", href: "/alerts" },
-    { icon: Volume2, label: "Reports", href: "/reports" },
+    { icon: Siren, label: "Reports", href: "/reports" },
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
     { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
@@ -50,7 +50,7 @@ export const ROLE_NAV_ITEMS = {
   barangay_official: [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Bell, label: "Alerts", href: "/alerts" },
-    { icon: Volume2, label: "Reports", href: "/reports" },
+    { icon: Siren, label: "Reports", href: "/reports" },
     { icon: Map, label: "Hazard Map", href: "/hazard-map" },
     { icon: MapPin, label: "Evacuation Centers", href: "/evacuation" },
     { icon: BookOpen, label: "Safety Tips", href: "/safety-tips" },
