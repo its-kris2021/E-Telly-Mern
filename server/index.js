@@ -361,7 +361,13 @@ app.post("/api/reports/update-status", protect, requireRole("system_admin", "cdr
           description: report.description || "Emergency report approved by CDRRMO",
           severity: alertSeverity,
           location: report.location?.exactAddress || (typeof report.location === "string" ? report.location : "") || "Unknown location",
-          barangays: [],
+          // Scope to the incident's actual location (GPS/free-text resolved
+          // at report creation — see routes/reports.js), not citywide. An
+          // empty array here means "every barangay_official sees it" in
+          // GET /api/alerts's { barangays: { $size: 0 } } citywide clause,
+          // which was broadcasting every community report to every barangay
+          // regardless of where it happened.
+          barangays: report.barangayKey ? [report.barangayKey] : [],
           source: "residents",
           linkedReportId: new mongoose.Types.ObjectId(reportId),
           lat: report.latitude ?? null,
