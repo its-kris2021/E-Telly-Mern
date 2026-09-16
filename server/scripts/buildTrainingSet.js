@@ -60,8 +60,13 @@ async function loadBarangayDaySnapshots() {
 }
 
 async function loadApprovedReportsByBarangayDay(reportsCol) {
+  // "resolved" is included alongside "approved" — it's the same verified
+  // report, just later in its lifecycle (CDRRMO/barangay official addressed
+  // it), not a different or less-trustworthy kind of report. Excluding it
+  // would silently drop most real reports from training once they're closed
+  // out, leaving only the historical import as a labeled data source.
   const reports = await reportsCol
-    .find({ status: "approved" })
+    .find({ status: { $in: ["approved", "resolved"] } })
     .project({ barangay: 1, location: 1, latitude: 1, longitude: 1, timestamp: 1, emergencyType: 1 })
     .toArray();
 

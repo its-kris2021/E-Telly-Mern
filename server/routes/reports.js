@@ -89,8 +89,11 @@ router.get("/approved", async (req, res) => {
 
     const { emergencyType, limit = 100 } = req.query;
 
-    // Build query
-    const query = { status: "approved" };
+    // Build query. Excludes historical bulk-import rows (see
+    // scripts/importHistoricalReports.js) — those exist only as training
+    // labels for the risk model, not live incidents, and must never render
+    // on the map as if a years-old report just happened.
+    const query = { status: "approved", importSource: { $ne: "historical_excel_import" } };
 
     // Filter by emergency type if specified
     if (emergencyType && emergencyType !== "all") {

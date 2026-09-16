@@ -69,10 +69,10 @@ async function run() {
 
   const col = mongoose.connection.db.collection("emergency_reports");
   const reports = await col
-    .find({ status: "approved", weatherSnapshot: { $exists: false } })
+    .find({ status: { $in: ["approved", "resolved"] }, weatherSnapshot: { $exists: false } })
     .toArray();
 
-  console.log(`Found ${reports.length} approved report(s) without a weatherSnapshot.`);
+  console.log(`Found ${reports.length} approved/resolved report(s) without a weatherSnapshot.`);
 
   let ok = 0, skipped = 0, failed = 0;
 

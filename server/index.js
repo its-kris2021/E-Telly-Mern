@@ -220,7 +220,12 @@ app.get("/api/reports", protect, requireRole("system_admin", "cdrrmo", "barangay
       return res.status(500).json({ success: false, error: "Database not connected" });
     const reports = await mongoose.connection.db
       .collection("emergency_reports")
-      .find(scopeToAssignedBarangay(req, "reporterBarangayKey"))
+      .find({
+        ...scopeToAssignedBarangay(req, "reporterBarangayKey"),
+        // Historical bulk-import rows (scripts/importHistoricalReports.js)
+        // are training labels only, not real reports for admins to review.
+        importSource: { $ne: "historical_excel_import" },
+      })
       .sort({ timestamp: -1 })
       .toArray();
     res.json({ success: true, reports });

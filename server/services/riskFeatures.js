@@ -58,7 +58,7 @@ export async function computeBarangayReportRate(reportsCol, barangayKey, asOfDat
   // weatherSnapshot, so training features and live features stay consistent.
   const candidates = await reportsCol
     .find({
-      status: "approved",
+      status: { $in: ["approved", "resolved"] },
       timestamp: { $gte: windowStart, $lt: windowEnd },
     })
     .project({ barangay: 1, location: 1, latitude: 1, longitude: 1 })
@@ -91,7 +91,7 @@ export function toFeatureVector(named) {
 // directly below — it only needs 17 lookups per cycle, not worth indexing for.
 export async function buildBarangayReportIndex(reportsCol) {
   const reports = await reportsCol
-    .find({ status: "approved" })
+    .find({ status: { $in: ["approved", "resolved"] } })
     .project({ barangay: 1, location: 1, latitude: 1, longitude: 1, timestamp: 1 })
     .toArray();
 
