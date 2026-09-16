@@ -7,7 +7,7 @@ import { sendAdminNotification } from "./push.js";
 import { sendFCMToBarangays } from "../services/fcm.js";
 import { signAlert } from "../services/alertSigning.js";
 import User from "../models/user.js";
-import { resolveBarangayKey } from "../config/barangays.js";
+import { resolveBarangayKey, nearestBarangayKey } from "../config/barangays.js";
 import { isOpsRole } from "../config/roles.js";
 
 const NON_RESIDENT_ROLES = ["system_admin", "admin"]; // ops roles come from isOpsRole()
@@ -173,8 +173,21 @@ router.post("/", protect, requireRole("cdrrmo", "barangay_official"), async (req
     const effectiveSeverity = type === "rescue" ? "evacuate" : severity;
     // Barangay officials can only ever raise alerts scoped to their own
     // barangay — ignore/override any client-supplied barangays array.
+    // CDRRMO's CreateAlertModal has no barangay-picker UI — it only ever
+    // sends barangays: [] — so a targeted (non-citywide) alert has to be
+    // inferred from the location they pinned/typed, same resolution order
+    // reports.js uses for reporterBarangayKey. An explicit non-empty
+    // barangays array from the client (if a caller ever sends one) still
+    // wins over the inferred guess.
+    const inferredBarangayKey = resolveBarangayKey(location) ?? nearestBarangayKey(lat, lng);
     const effectiveBarangays =
-      req.user.role === "barangay_official" ? [req.user.assignedBarangay] : (barangays ?? []);
+      req.user.role === "barangay_official"
+        ? [req.user.assignedBarangay]
+        : Array.isArray(barangays) && barangays.length > 0
+          ? barangays
+          : inferredBarangayKey
+            ? [inferredBarangayKey]
+            : [];
 
     // _id is pre-generated (rather than left to Alert.create) because the
     // signature is computed over the alert's id along with its other
