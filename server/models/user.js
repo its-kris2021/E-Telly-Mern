@@ -24,6 +24,14 @@ const userSchema = new mongoose.Schema(
     mustChangePassword: { type: Boolean, default: false },
     contactEmail: { type: String, default: "" },
     address: { type: String, default: "" },
+    // Structured mirror of `address` for residents — the Profile screen
+    // reads/writes these as discrete fields (barangay dropdown, street
+    // input, landmark input), separately from the single concatenated
+    // `address` string other screens display.
+    barangay: { type: String, default: "" },
+    streetDetails: { type: String, default: "" },
+    landmark: { type: String, default: "" },
+    phoneNumber: { type: String, default: "" },
     termsAccepted: { type: Boolean, default: false },
     termsAcceptedAt: { type: Date, default: null },
     termsAcceptedVersion: { type: String, default: "" },

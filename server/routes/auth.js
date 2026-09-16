@@ -45,6 +45,10 @@ function userPayload(user) {
     role:               user.role,
     assignedBarangay:   user.assignedBarangay ?? null,
     address:            user.address || "",
+    barangay:           user.barangay || "",
+    streetDetails:      user.streetDetails || "",
+    landmark:           user.landmark || "",
+    phoneNumber:        user.phoneNumber || "",
     mustChangePassword: user.mustChangePassword ?? false,
   };
 }
@@ -55,7 +59,7 @@ function userPayload(user) {
 // is enforced at login time, not here). Also accepts legacy email+password for
 // any non-Firebase callers.
 router.post("/register", async (req, res) => {
-  const { idToken, name, address, email, password, termsAccepted, termsVersion } = req.body;
+  const { idToken, name, address, barangay, streetDetails, landmark, email, password, termsAccepted, termsVersion } = req.body;
 
   // ── Firebase path (mobile) ──────────────────────────────────────────────────
   if (idToken) {
@@ -80,10 +84,13 @@ router.post("/register", async (req, res) => {
       }
 
       await User.create({
-        name:    name.trim(),
-        email:   normalizedEmail,
-        role:    "user",
-        address: address?.trim() || "",
+        name:          name.trim(),
+        email:         normalizedEmail,
+        role:          "user",
+        address:       address?.trim() || "",
+        barangay:      barangay?.trim() || "",
+        streetDetails: streetDetails?.trim() || "",
+        landmark:      landmark?.trim() || "",
         termsAccepted:        true,
         termsAcceptedAt:      new Date(),
         termsAcceptedVersion: termsVersion || "",
@@ -117,11 +124,14 @@ router.post("/register", async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 12);
     const user   = await User.create({
-      name:     name.trim(),
-      email:    email.trim().toLowerCase(),
-      password: hashed,
-      role:     "user",
-      address:  address?.trim() || "",
+      name:          name.trim(),
+      email:         email.trim().toLowerCase(),
+      password:      hashed,
+      role:          "user",
+      address:       address?.trim() || "",
+      barangay:      barangay?.trim() || "",
+      streetDetails: streetDetails?.trim() || "",
+      landmark:      landmark?.trim() || "",
     });
 
     return res.status(201).json({ token: signJwt(user), user: userPayload(user) });
@@ -203,12 +213,15 @@ router.get("/me", protect, async (req, res) => {
 // ── PATCH /api/auth/profile ───────────────────────────────────────────────────
 // Authenticated user updates their own address (used after Google sign-in profile completion).
 router.patch("/profile", protect, async (req, res) => {
-  const { address, termsAccepted, termsVersion } = req.body;
+  const { address, barangay, streetDetails, landmark, termsAccepted, termsVersion } = req.body;
   if (!address?.trim()) {
     return res.status(400).json({ message: "Address is required." });
   }
   try {
     const update = { address: address.trim() };
+    if (barangay?.trim()) update.barangay = barangay.trim();
+    if (streetDetails?.trim()) update.streetDetails = streetDetails.trim();
+    if (landmark?.trim()) update.landmark = landmark.trim();
     if (termsAccepted === true) {
       update.termsAccepted        = true;
       update.termsAcceptedAt      = new Date();
