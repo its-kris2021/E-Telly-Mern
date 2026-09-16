@@ -5,7 +5,7 @@ import {
   Mountain,
   Activity,
   MapPin,
-  FileWarning,
+  Siren,
   Sparkles,
   X,
 } from "lucide-react";
@@ -72,7 +72,7 @@ const EARTHQUAKE_LEGEND = {
 const REPORTS_LEGEND = {
   key: "reports",
   label: "Reports",
-  Icon: FileWarning,
+  Icon: Siren,
   iconColor: "text-red-500",
   note: "Marker border = alert severity level",
   rows: [

@@ -2,12 +2,12 @@ import { useState } from "react";
 import {
   Waves,
   Mountain,
-  MapPin,
   CircleDot,
   Wind,
   Tent,
   Layers,
   Sparkles,
+  Siren,
   X,
 } from "lucide-react";
 import RainfallStrip from "../flood/RainfallStrip";
@@ -44,7 +44,7 @@ const LAYERS = [
   {
     key: "reports",
     label: "Live Reports",
-    Icon: MapPin,
+    Icon: Siren,
     activeColor: "bg-purple-500",
     ring: "ring-purple-400",
   },
