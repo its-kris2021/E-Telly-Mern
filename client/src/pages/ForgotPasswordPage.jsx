@@ -31,8 +31,8 @@ export default function ForgotPasswordPage() {
     : "Contact System Administrator";
 
   const officeLabel = "System Admin";
-  const phone = "+63 917 000 0000";
-  const contactEmail = "rafael@etelly.com";
+  const phone = "0968-348-9687";
+  const contactEmail = "pentacappy@gmail.com";
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-6">
