@@ -43,20 +43,39 @@ function addDays(dayKey, n) {
 
 // Groups HazardSnapshot docs by barangay-day, keeping the snapshot with the
 // highest rain_24h that day (i.e. the day's peak-conditions reading) as the
-// representative feature source for that barangay-day.
+// representative feature source for that barangay-day. Done as a MongoDB
+// aggregation, not a `.find({}).lean()` + in-JS reduction, because the
+// underlying collection is raw per-capture ticks (every 30 min, ~816/day)
+// going back to a 2020 historical backfill — 71k+ docs and growing forever.
+// Loading all of that into Node on every retrain is exactly what OOM-killed
+// the web dyno nightly (R14/R15, see trainRiskModel.js header). Reducing
+// server-side bounds the result to one doc per barangay-per-day — growth is
+// now ~17 rows/day (barangay count), not ~816/day (capture frequency) — with
+// no cutoff on history, so the multi-year seasonal backfill stays available
+// to the model.
 async function loadBarangayDaySnapshots() {
-  const snapshots = await HazardSnapshot.find({}).lean();
-  const byKey = new Map(); // "barangay|day" -> snapshot
-
-  for (const snap of snapshots) {
-    const day = dayKeyManila(snap.capturedAt);
-    const key = `${snap.barangay}|${day}`;
-    const existing = byKey.get(key);
-    if (!existing || snap.rain_24h > existing.rain_24h) {
-      byKey.set(key, { ...snap, day });
-    }
-  }
-  return [...byKey.values()];
+  // $top picks the whole doc with the highest rain_24h per group without a
+  // blocking collection-wide $sort stage first — a plain $sort here (which
+  // is what this used to do) exceeds Atlas's 32MB in-memory sort limit at
+  // 71k+ docs and errors out (QueryExceededMemoryLimitNoDiskUseAllowed)
+  // rather than silently falling back to slow disk sorting.
+  const docs = await HazardSnapshot.aggregate([
+    {
+      $addFields: {
+        day: {
+          $dateToString: { format: "%Y-%m-%d", date: "$capturedAt", timezone: "Asia/Manila" },
+        },
+      },
+    },
+    {
+      $group: {
+        _id: { barangay: "$barangay", day: "$day" },
+        doc: { $top: { sortBy: { rain_24h: -1 }, output: "$$ROOT" } },
+      },
+    },
+    { $replaceRoot: { newRoot: { $mergeObjects: ["$doc", { day: "$_id.day" }] } } },
+  ]);
+  return docs;
 }
 
 async function loadApprovedReportsByBarangayDay(reportsCol) {
@@ -88,7 +107,12 @@ async function loadApprovedReportsByBarangayDay(reportsCol) {
   return byKey;
 }
 
-export async function buildTrainingSet(hazardType) {
+// Loads everything buildTrainingSet() needs from Mongo, once. flood and
+// landslide training runs both need the exact same snapshots/reports — only
+// the label computation differs per hazardType — so trainRiskModel.js loads
+// this a single time and reuses it for both, instead of hitting the DB (and
+// holding two full copies in memory at once) for every hazard type.
+export async function loadSharedTrainingData() {
   const reportsCol = mongoose.connection.db.collection("emergency_reports");
 
   const [snapshots, reportsByKey, reportRateIndex] = await Promise.all([
@@ -96,6 +120,12 @@ export async function buildTrainingSet(hazardType) {
     loadApprovedReportsByBarangayDay(reportsCol),
     buildBarangayReportIndex(reportsCol),
   ]);
+
+  return { snapshots, reportsByKey, reportRateIndex };
+}
+
+export async function buildTrainingSet(hazardType, sharedData) {
+  const { snapshots, reportsByKey, reportRateIndex } = sharedData ?? (await loadSharedTrainingData());
 
   const rows = [];
   for (const snap of snapshots) {

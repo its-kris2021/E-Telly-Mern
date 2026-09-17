@@ -31,6 +31,18 @@
  * hiccup mid-write can never leave predictionEngine.js with zero active
  * models for a hazard type — worst case, it keeps serving the last good
  * version, which is exactly the fallback behavior wanted here.
+ *
+ * Every invocation is also recorded in server/models/RetrainRun.js
+ * (startedAt/finishedAt/status, plus a per-hazard summary). This exists
+ * because the previous version of this job had no persisted record at all,
+ * and an OOM SIGKILL (Heroku R14/R15 — see buildTrainingSet.js's
+ * loadBarangayDaySnapshots header) silently ran every night for two weeks
+ * before anyone noticed the model had stopped updating, with the only
+ * evidence being Heroku's own ephemeral log buffer. A "running" RetrainRun
+ * row with no matching completed/error row by the next check is now the
+ * signal that a run was killed mid-flight — that kind of OS-level kill
+ * can't be caught in application code, but its *absence of a result* can
+ * be made visible.
  */
 
 import mongoose from "mongoose";
@@ -39,7 +51,8 @@ import { fileURLToPath, pathToFileURL } from "url";
 import { dirname, join } from "path";
 import RiskModel from "../models/RiskModel.js";
 import Alert from "../models/Alert.js";
-import { buildTrainingSet } from "./buildTrainingSet.js";
+import RetrainRun from "../models/RetrainRun.js";
+import { buildTrainingSet, loadSharedTrainingData } from "./buildTrainingSet.js";
 import {
   fitStandardization,
   applyStandardization,
@@ -93,9 +106,9 @@ function isValidTrainedModel({ weights, bias, operatingThreshold, metrics }) {
   return true;
 }
 
-async function trainOne(hazardType) {
+async function trainOne(hazardType, sharedData) {
   console.log(`\n── ${hazardType} ──────────────────────────────`);
-  const { rows } = await buildTrainingSet(hazardType);
+  const { rows } = await buildTrainingSet(hazardType, sharedData);
 
   if (rows.length < MIN_ROWS_TO_TRAIN) {
     console.log(
@@ -103,7 +116,7 @@ async function trainOne(hazardType) {
       `Skipping — the rule engine (services/${hazardType === "flood" ? "floodAlerts" : "landslideAlerts"}.js) ` +
       `keeps running unaffected; predictionEngine.js will simply have no AI model to load yet.`,
     );
-    return { status: "skipped_insufficient_data" };
+    return { status: "skipped_insufficient_data", rowCount: rows.length };
   }
 
   const X = rows.map((r) => r.features);
@@ -132,7 +145,7 @@ async function trainOne(hazardType) {
     ({ weights, bias } = await trainLogisticRegression(Xstd, y, trainOpts));
   } catch (err) {
     console.error(`Training threw an error — keeping previous active model: ${err.message}`);
-    return { status: "error", error: err.message };
+    return { status: "error", error: err.message, rowCount: rows.length };
   }
 
   if (!isValidTrainedModel({ weights, bias, operatingThreshold, metrics })) {
@@ -140,7 +153,7 @@ async function trainOne(hazardType) {
       "Training completed but produced invalid weights/threshold/metrics (NaN, Infinity, or out of " +
       "range) — discarding this run and keeping the previous active model as-is.",
     );
-    return { status: "invalid" };
+    return { status: "invalid", rowCount: rows.length };
   }
 
   const lastVersionDoc = await RiskModel.findOne({ hazardType }).sort({ version: -1 });
@@ -203,7 +216,7 @@ async function trainOne(hazardType) {
     `(precision=${fmt(fieldMetrics.precision)})`,
   );
   if (notes) console.log(`  Note: ${notes}`);
-  return { status: "promoted", version, doc };
+  return { status: "promoted", version, rowCount: rows.length, doc };
 }
 
 function fmt(v) {
@@ -215,9 +228,44 @@ function fmt(v) {
 // status summary (not thrown errors) so a scheduled caller can log a clean
 // one-line result without needing to know this module's internals.
 export async function trainRiskModels() {
-  console.log("[TrainRiskModel] Starting training run...");
-  const flood = await trainOne("flood");
-  const landslide = await trainOne("landslide");
+  // A "running" row still open after 2 hours means the process that owned
+  // it never got to write a final status — almost certainly killed
+  // mid-run (OOM SIGKILL) rather than still legitimately in progress, since
+  // a full run normally finishes in well under a minute.
+  await RetrainRun.updateMany(
+    { status: "running", startedAt: { $lt: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+    { $set: { status: "presumed_crashed", finishedAt: new Date() } },
+  );
+
+  const run = await RetrainRun.create({ status: "running" });
+  console.log(`[TrainRiskModel] Starting training run... (RetrainRun ${run._id})`);
+
+  let flood, landslide;
+  try {
+    // Loaded once and reused for both hazard types — flood/landslide need
+    // the exact same snapshots/reports, only the label computation differs
+    // (see buildTrainingSet.js). Halves peak memory and DB load per run.
+    const sharedData = await loadSharedTrainingData();
+    flood = await trainOne("flood", sharedData);
+    landslide = await trainOne("landslide", sharedData);
+  } catch (err) {
+    // trainOne() already catches its own per-hazard errors and returns
+    // {status:"error"} — reaching here means something outside it threw.
+    run.status = "error";
+    run.error = err.message;
+    run.finishedAt = new Date();
+    await run.save();
+    throw err;
+  }
+
+  run.status = "completed";
+  run.finishedAt = new Date();
+  run.hazards = {
+    flood: { status: flood.status, version: flood.version ?? null, rowCount: flood.rowCount ?? null, error: flood.error ?? null },
+    landslide: { status: landslide.status, version: landslide.version ?? null, rowCount: landslide.rowCount ?? null, error: landslide.error ?? null },
+  };
+  await run.save();
+
   console.log(
     `[TrainRiskModel] Training run complete — flood: ${flood.status}, landslide: ${landslide.status}`,
   );
