@@ -12,6 +12,7 @@ import {
   Plus,
   Phone,
   WifiOff,
+  Trash2,
 } from "lucide-react";
 import ModalShell from "../components/ui/ModalShell";
 import { connectSocket } from "../utils/socket";
@@ -566,6 +567,8 @@ export default function EvacuationPage() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [brgyOpen, setBrgyOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [pendingIds, setPendingIds] = useState(() => new Set());
   const brgyBtnRef = useRef(null);
 
@@ -640,7 +643,19 @@ export default function EvacuationPage() {
     }
 
     socket.on("evacuation_updated", onUpdate);
-    return () => socket.off("evacuation_updated", onUpdate);
+
+    function onDeleted({ centerId, log }) {
+      setCenters((prev) => prev.filter((c) => c._id !== centerId));
+      if (log && log.barangay === barangay) {
+        setLogs((prev) => [log, ...prev].slice(0, 50));
+      }
+    }
+
+    socket.on("evacuation_center_deleted", onDeleted);
+    return () => {
+      socket.off("evacuation_updated", onUpdate);
+      socket.off("evacuation_center_deleted", onDeleted);
+    };
   }, [barangay]);
 
   // ── Online / offline status ─────────────────────────────────────────────────
@@ -777,6 +792,21 @@ export default function EvacuationPage() {
     setCreateOpen(false);
   }
 
+  async function handleDeleteCenter(id) {
+    if (isOffline) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/evacuation/centers/${id}`, { method: "DELETE" });
+      setCenters((prev) => prev.filter((c) => c._id !== id));
+      fetchLogs(barangay);
+      setDeleteId(null);
+    } catch {
+      fetchCenters(barangay);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // ── Derived stats ───────────────────────────────────────────────────────────
   const totalCap = centers.reduce((s, c) => s + c.capacity, 0);
   const totalOcc = centers.reduce((s, c) => s + c.occupancy, 0);
@@ -796,6 +826,7 @@ export default function EvacuationPage() {
   );
 
   const editCenter = centers.find((c) => c._id === editId) ?? null;
+  const deleteCenter = centers.find((c) => c._id === deleteId) ?? null;
   const brgyLabel =
     BARANGAYS.find((b) => b.value === barangay)?.label ?? barangay;
   const hotlines = BARANGAYS.find((b) => b.value === barangay)?.hotlines ?? [];
@@ -1040,6 +1071,16 @@ export default function EvacuationPage() {
                             <Settings size={15} />
                           </button>
                         )}
+                        {isAdmin && (
+                          <button
+                            onClick={() => setDeleteId(c._id)}
+                            disabled={isOffline}
+                            title="Delete center"
+                            className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1244,6 +1285,16 @@ export default function EvacuationPage() {
           currentBarangay={barangay}
           onClose={() => setCreateOpen(false)}
           onCreate={handleCreateCenter}
+        />
+      )}
+
+      {/* Delete confirm modal — admin only */}
+      {deleteCenter && (
+        <DeleteConfirmModal
+          center={deleteCenter}
+          onClose={() => setDeleteId(null)}
+          onConfirm={() => handleDeleteCenter(deleteCenter._id)}
+          deleting={deleting}
         />
       )}
     </div>
