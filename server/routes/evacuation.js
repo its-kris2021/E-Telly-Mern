@@ -897,6 +897,34 @@ router.post("/centers", protect, requireRole("cdrrmo"), async (req, res) => {
   }
 });
 
+// ── DELETE /api/evacuation/centers/:id (CDRRMO — full center management) ────
+router.delete("/centers/:id", protect, requireRole("cdrrmo"), async (req, res) => {
+  try {
+    const userName = await resolveUserName(req);
+    const center = await EvacuationCenter.findById(req.params.id);
+    if (!center) return res.status(404).json({ message: "Center not found" });
+
+    await center.deleteOne();
+
+    const log = await EvacuationLog.create({
+      centerId: center._id,
+      centerName: center.name,
+      barangay: center.barangay,
+      action: "center_deleted",
+      previousValue: center.capacity,
+      newValue: 0,
+      delta: -center.capacity,
+      user: { id: req.user.id, name: userName },
+    });
+
+    req.app.get("io").emit("evacuation_center_deleted", { centerId: center._id, log });
+    res.json({ success: true, log });
+  } catch (err) {
+    console.error("❌ Delete center:", err.message);
+    res.status(500).json({ message: "Failed to delete center" });
+  }
+});
+
 // ── GET /api/evacuation/logs?barangay=...&limit=50 ───────────────────────────
 // Same force-scoping as GET /centers — a Barangay Official can only ever see
 // their own barangay's activity log, regardless of the ?barangay= query param.
