@@ -55,12 +55,6 @@ const userDotIcon = L.divIcon({
                   background:#3b82f6;border:2px solid white;
                   box-shadow:0 0 6px rgba(59,130,246,0.6);"></div>
     </div>
-    <style>
-      @keyframes pulse-ring {
-        0%   { transform: scale(0.5); opacity: 0.4; }
-        100% { transform: scale(2.2); opacity: 0; }
-      }
-    </style>
   `,
   iconSize: [20, 20],
   iconAnchor: [10, 10],

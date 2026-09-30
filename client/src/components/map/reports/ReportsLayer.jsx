@@ -151,21 +151,6 @@ const createAlertIcon = (type, severity) => {
   });
 };
 
-// ── Shared CSS ────────────────────────────────────────────────────────────────
-const style = document.createElement("style");
-style.textContent = `
-  @keyframes report-marker-pulse {
-    0%   { transform: scale(1);    opacity: 1; }
-    50%  { transform: scale(1.35); opacity: 0.6; }
-    100% { transform: scale(1);    opacity: 1; }
-  }
-  .report-marker-pulse { animation: report-marker-pulse 1.8s ease-in-out infinite; }
-  .report-popup { font-family: system-ui, -apple-system, sans-serif; }
-  .report-popup img { cursor: pointer; transition: transform 0.2s; }
-  .report-popup img:hover { transform: scale(1.05); }
-`;
-document.head.appendChild(style);
-
 // ── Inline SVG icons for popup metadata ──────────────────────────────────────
 const PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 const CLOCK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;

@@ -4,7 +4,24 @@ import {
   TileLayer,
   ZoomControl,
   ScaleControl,
+  useMap,
 } from "react-leaflet";
+import L from "leaflet";
+import {
+  installLeafletCspFix,
+  installPopupStyleListener,
+} from "../../../utils/leafletCspSafeHtml";
+
+installLeafletCspFix(L);
+
+// Lives inside MapContainer (needs useMap()) so every marker/popup built by
+// the layer files under map/** stays CSP-safe without any of them needing
+// to know about it.
+function CspPopupStyleFix() {
+  const map = useMap();
+  useEffect(() => installPopupStyleListener(map), [map]);
+  return null;
+}
 
 // Preconnecting these globally (e.g. from index.html) would make every page
 // — including the login screen, which never touches a map — pay connection

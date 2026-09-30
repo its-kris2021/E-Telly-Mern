@@ -51,22 +51,6 @@ const SEVERITY_STYLE = {
   },
 };
 
-let styleInjected = false;
-function injectStyle() {
-  if (styleInjected) return;
-  styleInjected = true;
-  const s = document.createElement("style");
-  s.textContent = `
-    @keyframes flood-pulse {
-      0%   { transform: scale(1);   opacity: 1; }
-      50%  { transform: scale(1.35); opacity: 0.6; }
-      100% { transform: scale(1);   opacity: 1; }
-    }
-    .flood-alert-pulse { animation: flood-pulse 1.8s ease-in-out infinite; }
-  `;
-  document.head.appendChild(s);
-}
-
 function createFloodAlertIcon(severity) {
   const s = SEVERITY_STYLE[severity] ?? SEVERITY_STYLE.watch;
   return L.divIcon({
@@ -188,8 +172,6 @@ function getAlertCoords(alert) {
 export default function FloodAlertsLayer({ visible }) {
   const map = useMap();
   const layerRef = useRef(null);
-
-  injectStyle();
 
   useEffect(() => {
     layerRef.current = L.layerGroup().addTo(map);

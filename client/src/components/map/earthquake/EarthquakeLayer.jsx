@@ -66,16 +66,6 @@ const createEarthquakeIcon = (magnitude) => {
   });
 };
 
-// Add pulse animation
-const style = document.createElement("style");
-style.textContent = `
-  @keyframes earthquake-pulse {
-    0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.4; }
-    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
-  }
-`;
-document.head.appendChild(style);
-
 export default function EarthquakeLayer({ visible, filters = {}, refreshTrigger }) {
   const map = useMap();
   const [earthquakes, setEarthquakes] = useState([]);

@@ -83,17 +83,6 @@ function makePopup(alert) {
     </div>`;
 }
 
-// Inject pulse animation once
-if (!document.getElementById("alert-pin-style")) {
-  const s = document.createElement("style");
-  s.id = "alert-pin-style";
-  s.textContent = `@keyframes alertPinPulse {
-    0%,100%{transform:scale(1);opacity:1}
-    50%{transform:scale(1.5);opacity:0.6}
-  }`;
-  document.head.appendChild(s);
-}
-
 export default function AlertsLayer({ visible }) {
   const map      = useMap();
   const layerRef = useRef(null);

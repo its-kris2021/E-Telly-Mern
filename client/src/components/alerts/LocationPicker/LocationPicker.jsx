@@ -3,14 +3,6 @@ import { Search, X, MapPin, Navigation, Loader2 } from "lucide-react";
 import { loadLeaflet } from "./leafletLoader";
 import { geocode, reverseGeocode } from "./nominatim";
 
-// Inject pulse animation for the "you are here" blue dot
-if (!document.getElementById("lp-pulse-style")) {
-  const s = document.createElement("style");
-  s.id = "lp-pulse-style";
-  s.textContent = "@keyframes lpPulse{0%{transform:scale(0.5);opacity:0.4}100%{transform:scale(2.2);opacity:0}}";
-  document.head.appendChild(s);
-}
-
 export default function LocationPicker({
   location,
   onLocationChange,
@@ -80,16 +72,9 @@ export default function LocationPicker({
   const dropPin = (map, lat, lon, label) => {
     const L = window.L;
     const pinHtml = `
-      <div style="position:relative;width:32px;height:42px">
-        <div style="
-          width:28px;height:28px;background:#dc2626;border:3px solid #fff;
-          border-radius:50% 50% 50% 0;transform:rotate(-45deg);
-          box-shadow:0 2px 10px rgba(0,0,0,0.4);position:absolute;top:0;left:2px
-        "></div>
-        <div style="
-          width:6px;height:6px;background:#fff;border-radius:50%;
-          position:absolute;top:8px;left:13px
-        "></div>
+      <div class="lp-pin">
+        <div class="lp-pin-head"></div>
+        <div class="lp-pin-dot"></div>
       </div>`;
 
     if (markerRef.current) {
@@ -109,14 +94,14 @@ export default function LocationPicker({
         const addr = await reverseGeocode(pos.lat, pos.lng);
         commitLocation(addr, pos.lat, pos.lng);
         markerRef.current?.setPopupContent(
-          `<div style="font-size:12px;max-width:200px;line-height:1.4">${addr}</div>`,
+          `<div class="lp-popup-text">${addr}</div>`,
         );
       });
     }
 
     if (label) {
       markerRef.current
-        .bindPopup(`<div style="font-size:12px;max-width:200px;line-height:1.4">${label}</div>`, { closeButton: false })
+        .bindPopup(`<div class="lp-popup-text">${label}</div>`, { closeButton: false })
         .openPopup();
     }
   };
@@ -125,14 +110,9 @@ export default function LocationPicker({
   const addUserDot = (map, lat, lon) => {
     const L = window.L;
     const dotHtml = `
-      <div style="position:relative;width:20px;height:20px;">
-        <div style="position:absolute;inset:0;border-radius:50%;
-                    background:#3b82f6;opacity:0.25;
-                    animation:lpPulse 1.5s ease-out infinite;"></div>
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-                    width:12px;height:12px;border-radius:50%;
-                    background:#3b82f6;border:2px solid white;
-                    box-shadow:0 0 6px rgba(59,130,246,0.6);"></div>
+      <div class="lp-user-dot">
+        <div class="lp-user-dot-ring"></div>
+        <div class="lp-user-dot-center"></div>
       </div>`;
     if (userDotRef.current) {
       userDotRef.current.setLatLng([lat, lon]);
@@ -168,7 +148,7 @@ export default function LocationPicker({
         const addr = await reverseGeocode(lat, lng);
         commitLocation(addr, lat, lng);
         markerRef.current
-          ?.bindPopup(`<div style="font-size:12px;max-width:200px;line-height:1.4">${addr}</div>`, { closeButton: false })
+          ?.bindPopup(`<div class="lp-popup-text">${addr}</div>`, { closeButton: false })
           .openPopup();
       });
 
