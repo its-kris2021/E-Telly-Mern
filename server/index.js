@@ -34,6 +34,9 @@ import rateLimit from "express-rate-limit";
 dotenv.config();
 
 const app = express();
+// Prevents the default X-Powered-By: Express response header, which
+// otherwise discloses the backend framework to anyone probing the API.
+app.disable("x-powered-by");
 const server = createServer(app);
 const isLocalMode = process.env.LOCAL_MODE === "true";
 
