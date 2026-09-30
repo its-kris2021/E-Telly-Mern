@@ -137,7 +137,10 @@ const io = new Server(server, {
   cors: corsOptions,
 });
 
-app.use(cors(corsOptions));
+// Scoped to /api only — static assets (uploads, the built client bundle)
+// don't need CORS at all, and were otherwise getting Access-Control-Allow-
+// Origin/Credentials headers reflected onto every image/JS/CSS response.
+app.use("/api", cors(corsOptions));
 app.use(express.json());
 
 const loginLimiter = rateLimit({
