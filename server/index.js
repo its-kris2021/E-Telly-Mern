@@ -71,7 +71,7 @@ app.use((req, res, next) => {
     [
       "default-src 'self'",
       "script-src 'self' https://unpkg.com",
-      "style-src 'self' 'unsafe-inline' https://unpkg.com",
+      "style-src 'self' https://unpkg.com",
       "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.tile.opentopomap.org https://lipad-fmc.dream.upd.edu.ph https://geoserver.geoportal.gov.ph https://res.cloudinary.com",
       "connect-src 'self' https://nominatim.openstreetmap.org https://earthquake.usgs.gov https://lipad-fmc.dream.upd.edu.ph https://geoserver.geoportal.gov.ph https://geoportal.gov.ph https://www.gdacs.org https://bagong.pagasa.dost.gov.ph https://www.pagasa.dost.gov.ph",
       "worker-src 'self'",
@@ -84,6 +84,14 @@ app.use((req, res, next) => {
     ].join("; ")
   );
 
+  next();
+});
+
+// API responses carry per-user/auth-scoped data (reports, alerts, tokens) —
+// without this, intermediate caches/browsers are free to reuse a prior
+// response for a later request under default HTTP caching rules.
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
   next();
 });
 
