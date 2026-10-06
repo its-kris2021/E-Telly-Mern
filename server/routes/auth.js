@@ -50,6 +50,7 @@ function userPayload(user) {
     landmark:           user.landmark || "",
     phoneNumber:        user.phoneNumber || "",
     mustChangePassword: user.mustChangePassword ?? false,
+    residencyStatus:    user.residencyStatus || "unverified",
   };
 }
 
