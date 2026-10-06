@@ -54,6 +54,34 @@ function uploadToCloudinary(buffer) {
   });
 }
 
+// Caps how often a resident can resubmit — without this, a resident whose
+// document keeps getting rejected could spam the admin queue indefinitely.
+// A rolling window (not a calendar-day reset) means the oldest attempt
+// simply ages out after 24h, freeing up one slot, rather than needing
+// timezone-aware "reset at midnight" logic.
+const ATTEMPT_LIMIT = 3;
+const ATTEMPT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function getAttemptInfo(userId) {
+  const windowStart = new Date(Date.now() - ATTEMPT_WINDOW_MS);
+  const recentAttempts = await VerificationRequest.find({
+    userId,
+    createdAt: { $gte: windowStart },
+  })
+    .sort({ createdAt: 1 })
+    .select("createdAt")
+    .lean();
+
+  const used = recentAttempts.length;
+  const remaining = Math.max(0, ATTEMPT_LIMIT - used);
+  const nextAttemptAt =
+    used >= ATTEMPT_LIMIT
+      ? new Date(recentAttempts[0].createdAt.getTime() + ATTEMPT_WINDOW_MS)
+      : null;
+
+  return { used, remaining, limit: ATTEMPT_LIMIT, nextAttemptAt };
+}
+
 function requestSummary(doc) {
   return {
     id: String(doc._id),
@@ -122,6 +150,16 @@ router.post("/requests", async (req, res) => {
       return res.status(400).json({ message: "At least one document photo is required" });
     }
 
+    const attemptInfo = await getAttemptInfo(req.user.id);
+    if (attemptInfo.remaining <= 0) {
+      return res.status(429).json({
+        message: `You've reached the maximum of ${ATTEMPT_LIMIT} verification attempts. Please try again after 24 hours.`,
+        attemptsUsed: attemptInfo.used,
+        attemptsLimit: attemptInfo.limit,
+        nextAttemptAt: attemptInfo.nextAttemptAt,
+      });
+    }
+
     const existingPending = await VerificationRequest.findOne({
       userId: req.user.id,
       status: "pending",
@@ -154,7 +192,13 @@ router.post("/requests", async (req, res) => {
     user.residencyStatus = "pending";
     await user.save();
 
-    res.status(201).json({ success: true, request: requestSummary(doc) });
+    const updatedAttemptInfo = await getAttemptInfo(req.user.id);
+    res.status(201).json({
+      success: true,
+      request: requestSummary(doc),
+      attemptsUsed: updatedAttemptInfo.used,
+      attemptsLimit: updatedAttemptInfo.limit,
+    });
   } catch (err) {
     console.error("[Verification] create request failed:", err.message);
     res.status(500).json({ message: "Failed to submit verification request" });
@@ -164,15 +208,20 @@ router.post("/requests", async (req, res) => {
 // GET /api/verification/requests/me — resident checks their own latest request.
 router.get("/requests/me", async (req, res) => {
   try {
-    const [doc, user] = await Promise.all([
+    const [doc, user, attemptInfo] = await Promise.all([
       VerificationRequest.findOne({ userId: req.user.id }).sort({ createdAt: -1 }).lean(),
       User.findById(req.user.id).select("residencyStatus"),
+      getAttemptInfo(req.user.id),
     ]);
 
     res.json({
       success: true,
       residencyStatus: user?.residencyStatus ?? "unverified",
       request: doc ? requestSummary(doc) : null,
+      attemptsUsed: attemptInfo.used,
+      attemptsRemaining: attemptInfo.remaining,
+      attemptsLimit: attemptInfo.limit,
+      nextAttemptAt: attemptInfo.nextAttemptAt,
     });
   } catch (err) {
     console.error("[Verification] fetch my request failed:", err.message);
