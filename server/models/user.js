@@ -35,6 +35,14 @@ const userSchema = new mongoose.Schema(
     termsAccepted: { type: Boolean, default: false },
     termsAcceptedAt: { type: Date, default: null },
     termsAcceptedVersion: { type: String, default: "" },
+    // Gates access to resident-only mobile features (Reports, Chat) — see
+    // routes/verification.js. Flips to "pending" on request submission and
+    // to "verified"/"rejected" once a system_admin reviews it.
+    residencyStatus: {
+      type: String,
+      enum: ["unverified", "pending", "verified", "rejected"],
+      default: "unverified",
+    },
   },
   { timestamps: true },
 );

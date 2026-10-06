@@ -22,6 +22,7 @@ import messageReportRoutes from "./routes/messageReports.js";
 import chatModerationRoutes from "./routes/chatModeration.js";
 import chatRestrictionRoutes from "./routes/chatRestriction.js";
 import auditLogRoutes from "./routes/auditLogs.js";
+import verificationRoutes from "./routes/verification.js";
 import { startAlertEngine } from "./scripts/alertEngine.js";
 import { startSyncScheduler } from "./scripts/syncToCloud.js";
 import { startChatModerationScheduler } from "./scripts/chatModerationScheduler.js";
@@ -186,6 +187,7 @@ app.use("/api/message-reports", messageReportRoutes);
 app.use("/api/chat-monitoring", chatModerationRoutes);
 app.use("/api/chat-restriction", chatRestrictionRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/verification", verificationRoutes);
 app.use("/uploads", express.static(join(dirname(fileURLToPath(import.meta.url)), "uploads")));
 
 // Socket.IO

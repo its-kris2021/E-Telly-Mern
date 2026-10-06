@@ -15,6 +15,7 @@ const ReportsPage = lazy(() => import("./pages/ReportPage"));
 const SafetyTipsPage = lazy(() => import("./pages/SafetyTipsPage"));
 const SafetyTipDetailPage = lazy(() => import("./pages/SafetyTipDetailPage"));
 const ChatMonitoringPage = lazy(() => import("./pages/ChatMonitoringPage"));
+const VerificationPage = lazy(() => import("./pages/VerificationPage"));
 const AuditLogsPage = lazy(() => import("./pages/AuditLogsPage"));
 const ModelPerformancePage = lazy(() => import("./pages/ModelPerformancePage"));
 import { getUserRole, getHomePath, ROLE_HOME, ROLE_NAV_ITEMS } from "./config/roleModules";
@@ -233,6 +234,10 @@ export default function App() {
         <Route
           path="/manage-users"
           element={<ProtectedLayout Page={ManageUsersPage} roles={rolesFor("/manage-users")} />}
+        />
+        <Route
+          path="/resident-verification"
+          element={<ProtectedLayout Page={VerificationPage} roles={rolesFor("/resident-verification")} />}
         />
         <Route
           path="/audit-logs"

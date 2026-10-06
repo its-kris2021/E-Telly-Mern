@@ -11,6 +11,7 @@ import {
   Sparkles,
   LayoutDashboard,
   Monitor,
+  ShieldCheck,
 } from "lucide-react";
 import { LuLogs } from "react-icons/lu";
 
@@ -33,6 +34,7 @@ export const ROLE_NAV_ITEMS = {
   // access.
   system_admin: [
     { icon: Users, label: "User Management", href: "/manage-users" },
+    { icon: ShieldCheck, label: "Resident Verification", href: "/resident-verification" },
     { icon: Monitor, label: "Chat Monitoring", href: "/chat-monitoring" },
     { icon: LuLogs, label: "Audit Logs", href: "/audit-logs" },
     { icon: Sparkles, label: "AI Model Performance", href: "/model-performance" },
