@@ -82,7 +82,7 @@ async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, 
   if (probability < threshold) return probability;
 
   const severity = severityFromProbability(probability, threshold);
-  if (await ruleEngineAlreadyCovers(key, hazardType, SEVERITY_RANK[severity])) return;
+  if (await ruleEngineAlreadyCovers(key, hazardType, SEVERITY_RANK[severity])) return probability;
 
   const barangayName = barangayLabel(key);
   const confidencePct = Math.round(probability * 100);
