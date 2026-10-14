@@ -66,7 +66,7 @@ async function ruleEngineAlreadyCovers(barangayKey, hazardType, minSeverityRank)
 }
 
 async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, dischargeRaw, barangayReportRate30d }) {
-  if (!model) return;
+  if (!model) return null;
 
   const named = {
     ...extractSnapshotFeatures(weatherRaw),
@@ -79,7 +79,7 @@ async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, 
   const probability = predictProba(standardized, model.weights, model.bias);
 
   const threshold = model.operatingThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
-  if (probability < threshold) return;
+  if (probability < threshold) return probability;
 
   const severity = severityFromProbability(probability, threshold);
   if (await ruleEngineAlreadyCovers(key, hazardType, SEVERITY_RANK[severity])) return;
@@ -107,6 +107,7 @@ async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, 
   });
 
   console.log(`[PredictionEngine] ${hazardType}/${key} — probability=${probability.toFixed(2)} severity=${severity}`);
+  return probability;
 }
 
 export async function runPredictionChecks() {
@@ -122,6 +123,12 @@ export async function runPredictionChecks() {
     if (!batch) return;
 
     const reportsCol = mongoose.connection.db.collection("emergency_reports");
+    // Tracks the highest probability seen this cycle per hazard type, purely
+    // for the summary log below — makes a "model never clears threshold"
+    // state visible in logs without needing an ad-hoc DB query (see the
+    // calibration bug this replaced: operatingThreshold was unreachable by
+    // live data for months with no visible symptom other than zero AI alerts).
+    const maxProbSeen = { flood: -1, landslide: -1 };
 
     for (let i = 0; i < BARANGAYS.length; i++) {
       const { key, coord } = BARANGAYS[i];
@@ -134,13 +141,23 @@ export async function runPredictionChecks() {
 
       for (const hazardType of HAZARD_TYPES) {
         try {
-          await checkBarangayHazard({
+          const probability = await checkBarangayHazard({
             key, coord, hazardType, model: models[hazardType], weatherRaw, dischargeRaw, barangayReportRate30d,
           });
+          if (probability != null) maxProbSeen[hazardType] = Math.max(maxProbSeen[hazardType], probability);
         } catch (err) {
           console.error(`[PredictionEngine] Check failed for ${hazardType}/${key}:`, err.message);
         }
       }
+    }
+
+    for (const hazardType of HAZARD_TYPES) {
+      if (maxProbSeen[hazardType] < 0) continue; // no active model for this hazard type
+      const threshold = models[hazardType]?.operatingThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
+      console.log(
+        `[PredictionEngine] cycle summary ${hazardType}: maxProbability=${maxProbSeen[hazardType].toFixed(3)} ` +
+        `threshold=${threshold.toFixed(3)}`,
+      );
     }
   } catch (err) {
     console.error("[PredictionEngine] Run failed:", err.message);

@@ -12,7 +12,7 @@
 
 import cron from "node-cron";
 import Alert from "../models/Alert.js";
-import { runFloodEvacuationCheck, runHeavyRainfallCheck } from "../services/floodAlerts.js";
+import { runFloodEvacuationCheck, runHeavyRainfallCheck, runDailyAccumulationCheck } from "../services/floodAlerts.js";
 import { runLandslideCheck }       from "../services/landslideAlerts.js";
 import { runEarthquakeCheck }      from "../services/earthquakeAlerts.js";
 import { runTyphoonCheck }         from "../services/typhoonAlerts.js";
@@ -72,9 +72,10 @@ async function runSystemChecks() {
   // from a bare setTimeout/cron.schedule callback with no caller to catch
   // it), just get logged and wait for the next scheduled tick.
   try {
-    await runFloodEvacuationCheck(); // warms rainfall-hourly + landslide cache
-    await runHeavyRainfallCheck();   // reuses warm cache
-    await runLandslideCheck();       // reuses warm cache from flood check above
+    await runFloodEvacuationCheck();   // warms rainfall-hourly + landslide cache
+    await runHeavyRainfallCheck();     // reuses warm cache
+    await runDailyAccumulationCheck(); // reads HazardSnapshot, no Open-Meteo call of its own
+    await runLandslideCheck();         // reuses warm cache from flood check above
   } catch (err) {
     console.error("[AlertEngine] System checks failed:", err.message);
   }

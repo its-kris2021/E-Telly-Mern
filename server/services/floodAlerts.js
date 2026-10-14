@@ -34,6 +34,7 @@ import {
 } from "./openMeteoCache.js";
 import { BARANGAY_COORDS, barangayLabel } from "../config/barangays.js";
 import { toDateKey, upsertSystemAlert } from "./alertHelpers.js";
+import HazardSnapshot from "../models/HazardSnapshot.js";
 
 const SOURCE_CITATION =
   "Source: Open-Meteo forecast (doi:10.5281/zenodo.7970649); " +
@@ -43,6 +44,31 @@ const SOURCE_CITATION =
 const YELLOW = 7.5;
 const ORANGE = 15;
 const RED    = 30;
+
+// Sustained daily-accumulation thresholds (mm/24h) — supplements the PAGASA
+// hourly-intensity tiers above, which can miss prolonged moderate rain that
+// never spikes above an hourly cutoff but still saturates the ground over a
+// full day. These are NOT PAGASA thresholds (different variable: mm/24h, not
+// mm/hr) — they're empirical percentiles of daily rainfall from a 2011-2025
+// daily station record for Tanay, Rizal (a neighboring municipality in the
+// same Sierra Madre/Marikina watershed system; used here only as a reference
+// distribution since no equivalent long-run daily series for Antipolo itself
+// was available at the time of this calibration — see
+// "Tanay Daily Data.csv" in the repo root). n=5479 days; distribution is
+// zero-inflated (45% of days have 0mm) and heavily right-skewed, so
+// percentiles are used instead of mean/std:
+//   p95 = 42.0 mm/24h   (top ~5% of days historically)
+//   p99 = 101.0 mm/24h  (top ~1% of days historically)
+const DAILY_WATCH_MM   = 42;
+const DAILY_WARNING_MM = 101;
+const DAILY_SOURCE_CITATION =
+  "Source: HazardSnapshot observed 24h rainfall; thresholds: 95th/99th percentile of " +
+  "2011-2025 daily rainfall, Tanay, Rizal station record (reference distribution, not a " +
+  "PAGASA standard).";
+// A snapshot older than this is considered too stale to trust for a
+// "right now" accumulation check — capture runs every 30 min
+// (scripts/alertEngine.js), so this is a generous multiple of that cadence.
+const SNAPSHOT_MAX_AGE_MS = 90 * 60 * 1000;
 
 const BARANGAYS = Object.entries(BARANGAY_COORDS).map(([key, c]) => ({ key, lat: c.lat, lon: c.lng }));
 
@@ -240,6 +266,53 @@ export async function runHeavyRainfallCheck() {
       await checkHeavyRainfallForBarangay(key, lat, lon);
     } catch (err) {
       console.error(`[AlertEngine] Heavy rainfall check failed for ${key}:`, err.message);
+    }
+  }
+}
+
+// Sustained 24h-accumulation check — distinct from checkHeavyRainfallForBarangay
+// above (which looks at forecast *peak intensity*, mm/hr). Reads the most
+// recent HazardSnapshot (already captured every 30 min for the risk model,
+// see services/weatherSnapshotService.js) rather than issuing its own
+// Open-Meteo call, since rain_24h there is exactly the observed trailing-24h
+// total this check needs.
+async function checkDailyAccumulationForBarangay(key, lat, lon) {
+  const snapshot = await HazardSnapshot.findOne({ barangay: key }).sort({ capturedAt: -1 }).lean();
+  if (!snapshot) return;
+  if (Date.now() - new Date(snapshot.capturedAt).getTime() > SNAPSHOT_MAX_AGE_MS) return;
+
+  const rain24h = snapshot.rain_24h ?? 0;
+  if (rain24h < DAILY_WATCH_MM) return;
+
+  const severity = rain24h >= DAILY_WARNING_MM ? "warning" : "watch";
+  const barangayName = barangayLabel(key);
+
+  await upsertSystemAlert({
+    _dedupeKey: `rainfall_daily_${severity}_${key}_${toDateKey()}`,
+    type: "rainfall",
+    severity,
+    title: `Sustained Heavy Rainfall — Barangay ${barangayName}`,
+    description:
+      `Barangay ${barangayName} has accumulated ${rain24h.toFixed(1)} mm of rainfall over the past ` +
+      `24 hours — ${severity === "warning" ? "within the top 1%" : "within the top 5%"} of daily ` +
+      `totals historically recorded for this region. Prolonged rainfall at this level can saturate ` +
+      `soil and overwhelm drainage even without a single intense burst. Residents should stay alert ` +
+      `for flooding in low-lying and drainage-adjacent areas. ` + DAILY_SOURCE_CITATION,
+    barangays: [key],
+    location: `${lat},${lon}`,
+    lat, lng: lon,
+    expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+  });
+
+  console.log(`[AlertEngine] DailyRainfall/${key} — ${rain24h.toFixed(1)} mm/24h, severity: ${severity}`);
+}
+
+export async function runDailyAccumulationCheck() {
+  for (const { key, lat, lon } of BARANGAYS) {
+    try {
+      await checkDailyAccumulationForBarangay(key, lat, lon);
+    } catch (err) {
+      console.error(`[AlertEngine] Daily accumulation check failed for ${key}:`, err.message);
     }
   }
 }

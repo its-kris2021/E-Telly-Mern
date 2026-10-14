@@ -217,23 +217,36 @@ export function computeMetrics(yTrue, yProb, threshold = 0.5) {
   return { precision, recall, f1, auc, tp, fp, fn, tn };
 }
 
-// Scans candidate thresholds and returns the one maximizing F1. Necessary
-// because flood/landslide positives are a tiny fraction of rows (~0.5%/0.3%
-// of barangay-days in this project's historical data) — predicted
-// probabilities for even the riskiest days stay well under the conventional
-// default of 0.5, so reporting metrics (or gating live alerts) at 0.5 shows
-// recall=0 not because the model failed, but because nothing ever crosses
-// that line. This finds the threshold that actually separates positives from
-// negatives in the model's own output range.
+// Recall-constrained threshold search. Pure F1-argmax (what this used to do
+// unconditionally) picks whichever threshold maximizes F1 on pooled CV
+// predictions — but with positives at ~0.3-0.5% of rows and only ~100-150
+// positive examples total, that argmax collapses onto the single highest
+// handful of training-positive probabilities, landing on a threshold no
+// *live* probability in practice ever clears (predictionEngine.js's gate
+// then never fires — confirmed live: max live probability ~0.63 against a
+// stored operatingThreshold of ~0.85). Instead: among thresholds that reach
+// at least `minRecall` on pooled CV predictions, pick the highest one (the
+// standard recall-constrained operating-point choice for a rare positive
+// class — maximize precision subject to a recall floor). Falls back to
+// F1-argmax only if no scanned threshold reaches minRecall at all (a
+// model/data problem, not a threshold one), and logs a warning so that's
+// visible rather than silent.
 export function findOptimalThreshold(yTrue, yProb, opts = {}) {
-  const { steps = 199 } = opts; // ~0.005 granularity across (0, 1)
-  let best = { threshold: 0.5, f1: -1 };
+  const { steps = 199, minRecall = 0.5 } = opts; // ~0.005 granularity across (0, 1)
+  let bestF1 = { threshold: 0.5, f1: -1 };
+  let bestQualifying = null; // highest threshold with recall >= minRecall
   for (let i = 1; i < steps; i++) {
     const threshold = i / steps;
-    const { f1 } = computeMetrics(yTrue, yProb, threshold);
-    if (f1 != null && f1 > best.f1) best = { threshold, f1 };
+    const { f1, recall } = computeMetrics(yTrue, yProb, threshold);
+    if (f1 != null && f1 > bestF1.f1) bestF1 = { threshold, f1 };
+    if (recall != null && recall >= minRecall) bestQualifying = threshold;
   }
-  return best.threshold;
+  if (bestQualifying != null) return bestQualifying;
+  console.warn(
+    `[findOptimalThreshold] No threshold achieved recall >= ${minRecall} on pooled CV ` +
+    `predictions — falling back to F1-argmax (${bestF1.threshold.toFixed(3)}).`,
+  );
+  return bestF1.threshold;
 }
 
 function shuffledIndices(n) {

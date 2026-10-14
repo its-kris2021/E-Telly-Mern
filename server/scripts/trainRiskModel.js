@@ -68,6 +68,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "../.env") });
 
 const MIN_ROWS_TO_TRAIN = 5; // below this, standardization/CV aren't meaningful
+// Operating threshold is chosen as the highest value that still catches at
+// least this fraction of real positive cases on held-out CV folds (see
+// services/logisticRegression.js findOptimalThreshold) — lower this to gate
+// alerts more aggressively (more recall, more false positives), raise it
+// for the opposite. Revisit using each model's stored fieldMetrics
+// (real confirm/reject outcomes) once a few retrain cycles have accumulated.
+const OPERATING_THRESHOLD_MIN_RECALL = 0.5;
 
 // Live, post-hoc field performance — how past AI predictions for this hazard
 // type actually did, per admin confirm/reject (routes/alerts.js) and the
@@ -138,7 +145,9 @@ async function trainOne(hazardType, sharedData) {
     // findOptimalThreshold) — the conventional 0.5 cutoff never fires, so pick
     // the threshold that actually separates positives from negatives in this
     // model's own held-out predictions, and report metrics at that point too.
-    operatingThreshold = findOptimalThreshold(pooledTrue, pooledProb);
+    operatingThreshold = findOptimalThreshold(pooledTrue, pooledProb, {
+      minRecall: OPERATING_THRESHOLD_MIN_RECALL,
+    });
     metricsAtOperatingThreshold = computeMetrics(pooledTrue, pooledProb, operatingThreshold);
 
     // Final weights, fit on the full dataset, are what gets deployed.
