@@ -41,10 +41,6 @@ import {
 // ── Config — change these to re-run with different splits ──────────────────
 const TEST_MONTHS = 12;
 const VALIDATION_MONTHS = 6;
-// Matches trainRiskModel.js's OPERATING_THRESHOLD_MIN_RECALL (see Step 0
-// report) so the threshold-selection policy being evaluated here is the same
-// one actually deployed, not a different target invented for this script.
-const RECALL_TARGET = 0.5;
 const BOOTSTRAP_RESAMPLES = 1000;
 const MIN_TEST_POSITIVES_WARNING = 10;
 // Same hyperparameters trainRiskModel.js uses, so this is an apples-to-apples
@@ -187,7 +183,7 @@ async function evaluateVariant(trainRows, valRows, testRows, featureNames) {
   const Xval = valRows.map((r) => applyStandardization(r.features, means, stds));
   const yval = valRows.map((r) => r.label);
   const probVal = Xval.map((x) => predictProba(x, weights, bias));
-  const threshold = findOptimalThreshold(yval, probVal, { minRecall: RECALL_TARGET });
+  const threshold = findOptimalThreshold(yval, probVal);
 
   const Xtest = testRows.map((r) => applyStandardization(r.features, means, stds));
   const ytest = testRows.map((r) => r.label);
@@ -356,7 +352,7 @@ async function writeOutputFiles(allResults) {
 
   const payload = {
     generatedAt: new Date().toISOString(),
-    config: { TEST_MONTHS, VALIDATION_MONTHS, RECALL_TARGET, BOOTSTRAP_RESAMPLES, TRAIN_OPTS },
+    config: { TEST_MONTHS, VALIDATION_MONTHS, BOOTSTRAP_RESAMPLES, TRAIN_OPTS },
     results: allResults,
   };
   fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2));
@@ -364,7 +360,7 @@ async function writeOutputFiles(allResults) {
   let md = `# Risk model evaluation — ${dateStr}\n\n`;
   md += `Time-based holdout (no shuffling): test = most recent ${TEST_MONTHS} months, ` +
     `validation = the ${VALIDATION_MONTHS} months before that, train = everything older. ` +
-    `Threshold chosen on validation only (recall target ${RECALL_TARGET}), applied fixed to test.\n\n`;
+    `Threshold chosen on validation only (F1-argmax), applied fixed to test.\n\n`;
 
   for (const [hazardType, r] of Object.entries(allResults)) {
     md += `## ${hazardType}\n\n`;
