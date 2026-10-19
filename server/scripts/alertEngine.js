@@ -35,9 +35,16 @@ async function runExpiryCleanup() {
     );
 
     // Unconfirmed AI predictions that expired with no report ever backing
-    // them up — treat as a false positive. predictionEngine.js's own gating
-    // against active rule-based alerts already prevents the "AI just
-    // duplicated a real alert" case from reaching here.
+    // them up — nobody (admin or matching report) ever judged whether the
+    // prediction was right or wrong, so this must NOT be recorded as
+    // "false_positive" (that label is reserved for an actual admin
+    // PATCH .../reject — see routes/alerts.js). Mislabeling these as false
+    // positives silently forced fieldMetrics/precision to 0% regardless of
+    // real model quality, since this auto-expiry path fires far more often
+    // than the review UI ever gets used (see
+    // scripts/output/ai-precision-audit-2026-10-15.md). "expired_unconfirmed"
+    // keeps the data (for UX/review-rate diagnostics) without corrupting the
+    // precision signal.
     const aiUnconfirmedIds = expiring
       .filter((a) => a.source === "ai" && a.confirmedOutcome === "unconfirmed")
       .map((a) => a._id);
@@ -46,7 +53,7 @@ async function runExpiryCleanup() {
         { _id: { $in: aiUnconfirmedIds } },
         {
           $set: {
-            confirmedOutcome: "false_positive",
+            confirmedOutcome: "expired_unconfirmed",
             confirmedBy: "auto:expired_unconfirmed",
             confirmedAt: new Date(),
           },
@@ -56,7 +63,7 @@ async function runExpiryCleanup() {
 
     console.log(
       `[AlertEngine] Expiry cleanup — deactivated ${expiring.length} expired alert(s)` +
-      (aiUnconfirmedIds.length > 0 ? `, ${aiUnconfirmedIds.length} unconfirmed AI prediction(s) auto-marked false positive` : ""),
+      (aiUnconfirmedIds.length > 0 ? `, ${aiUnconfirmedIds.length} unconfirmed AI prediction(s) marked expired_unconfirmed (not false_positive)` : ""),
     );
   } catch (err) {
     console.error("[AlertEngine] Expiry cleanup failed:", err.message);

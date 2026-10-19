@@ -217,23 +217,42 @@ export function computeMetrics(yTrue, yProb, threshold = 0.5) {
   return { precision, recall, f1, auc, tp, fp, fn, tn };
 }
 
-// Scans candidate thresholds and returns the one maximizing F1. Necessary
-// because flood/landslide positives are a tiny fraction of rows (~0.5%/0.3%
-// of barangay-days in this project's historical data) — predicted
-// probabilities for even the riskiest days stay well under the conventional
-// default of 0.5, so reporting metrics (or gating live alerts) at 0.5 shows
-// recall=0 not because the model failed, but because nothing ever crosses
-// that line. This finds the threshold that actually separates positives from
-// negatives in the model's own output range.
+// Recall-floored threshold search. Pure F1-argmax (what this did before
+// 2026-10-15) picks whichever threshold maximizes F1 on pooled CV
+// predictions — but with positives at ~0.3-0.5% of rows, F1-argmax lands
+// near the conventional 0.5 default (since that's where precision*recall is
+// jointly largest at this base rate), which in turn means precision stays in
+// the ~1% range (live field data confirmed this: 0 confirmed / 13
+// false-positive AI alerts against the pre-2026-10-15 models). Once the
+// 2026-10-15 HazardSnapshot data repair gave the model real out-of-time
+// signal (ROC-AUC 0.79/0.90 flood/landslide, see
+// scripts/output/ai-precision-audit-2026-10-15.md), a backtest across the
+// full threshold range showed both hazards have a stable plateau around
+// 0.89-0.91 where precision is ~15-20x higher than at 0.5 while recall is
+// still well above zero (not the near-useless ~1-in-20 recall you get by
+// pushing the threshold to its absolute max). `minRecall=0.15` is picked to
+// land in that plateau for both hazards without hardcoding a threshold
+// value directly — among thresholds that still achieve at least that recall
+// on pooled CV predictions, picks the highest one. Falls back to F1-argmax
+// only if no threshold reaches the recall floor at all (a model/data
+// problem, not a threshold one), and logs a warning so that's visible
+// rather than silent.
 export function findOptimalThreshold(yTrue, yProb, opts = {}) {
-  const { steps = 199 } = opts; // ~0.005 granularity across (0, 1)
-  let best = { threshold: 0.5, f1: -1 };
+  const { steps = 199, minRecall = 0.15 } = opts; // ~0.005 granularity across (0, 1)
+  let bestF1 = { threshold: 0.5, f1: -1 };
+  let bestQualifying = null; // highest threshold with recall >= minRecall
   for (let i = 1; i < steps; i++) {
     const threshold = i / steps;
-    const { f1 } = computeMetrics(yTrue, yProb, threshold);
-    if (f1 != null && f1 > best.f1) best = { threshold, f1 };
+    const { f1, recall } = computeMetrics(yTrue, yProb, threshold);
+    if (f1 != null && f1 > bestF1.f1) bestF1 = { threshold, f1 };
+    if (recall != null && recall >= minRecall) bestQualifying = threshold;
   }
-  return best.threshold;
+  if (bestQualifying != null) return bestQualifying;
+  console.warn(
+    `[findOptimalThreshold] No threshold achieved recall >= ${minRecall} on pooled CV ` +
+    `predictions — falling back to F1-argmax (${bestF1.threshold.toFixed(3)}).`,
+  );
+  return bestF1.threshold;
 }
 
 function shuffledIndices(n) {

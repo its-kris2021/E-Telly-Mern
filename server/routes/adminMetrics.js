@@ -22,12 +22,16 @@ router.get("/model-metrics", protect, requireRole("system_admin", "cdrrmo", "bar
     // the active model version's — RiskModel.fieldMetrics is a point-in-time
     // snapshot taken at each retrain, this is the current running total).
     const outcomeCounts = async (hazardType) => {
-      const [truePositives, falsePositives, unconfirmed] = await Promise.all([
+      const [truePositives, falsePositives, unconfirmed, expiredUnconfirmed] = await Promise.all([
         Alert.countDocuments({ source: "ai", type: hazardType, confirmedOutcome: "true_positive" }),
         Alert.countDocuments({ source: "ai", type: hazardType, confirmedOutcome: "false_positive" }),
         Alert.countDocuments({ source: "ai", type: hazardType, confirmedOutcome: "unconfirmed" }),
+        // Expired with no admin review and no matching report — NOT a
+        // verified false positive, kept separate so it can't be mistaken
+        // for one (see models/Alert.js confirmedOutcome comment).
+        Alert.countDocuments({ source: "ai", type: hazardType, confirmedOutcome: "expired_unconfirmed" }),
       ]);
-      return { truePositives, falsePositives, unconfirmed };
+      return { truePositives, falsePositives, unconfirmed, expiredUnconfirmed };
     };
 
     const [floodOutcomes, landslideOutcomes] = await Promise.all([

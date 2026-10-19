@@ -12,7 +12,12 @@
  * overfit.
  */
 
-import { HIGH_SUSCEPTIBILITY_BARANGAYS, resolveBarangayKey, nearestBarangayKey } from "../config/barangays.js";
+import {
+  LANDSLIDE_HAZARD_DISTANCE_KM,
+  FLOOD_HAZARD_DISTANCE_KM,
+  resolveBarangayKey,
+  nearestBarangayKey,
+} from "../config/barangays.js";
 
 export const FEATURE_NAMES = [
   "rain_6h",
@@ -32,12 +37,18 @@ export const FEATURE_NAMES = [
   "riverDischarge",
 ];
 
-// Static, zero-data-required signal: is this a documented high-susceptibility
-// slope area? (MGB geohazard mapping — see config/barangays.js.) Applied to
-// both the flood and landslide models since steep-terrain barangays also see
-// faster runoff-driven flash flooding, not just slope failure.
-export function susceptibilityFeature(barangayKey) {
-  return HIGH_SUSCEPTIBILITY_BARANGAYS.includes(barangayKey) ? 1 : 0;
+// Static, zero-report signal: how close is this barangay to a "High" hazard
+// zone in the official NOAH/MGB-style hazard shapefiles for Rizal (see the
+// *_HAZARD_DISTANCE_KM tables in config/barangays.js for sourcing)? Decays
+// from 1 (centroid inside a High-hazard polygon) toward 0 as distance grows —
+// hazard-type-specific now (previously this reused the landslide list for
+// both flood and landslide; flood now has its own distance table since the
+// two hazard shapefiles delineate different zones).
+export function susceptibilityFeature(barangayKey, hazardType) {
+  const table = hazardType === "flood" ? FLOOD_HAZARD_DISTANCE_KM : LANDSLIDE_HAZARD_DISTANCE_KM;
+  const distanceKm = table[barangayKey];
+  if (distanceKm == null) return 0;
+  return 1 / (1 + distanceKm);
 }
 
 // Rolling count of approved reports (any hazard type) filed in this barangay

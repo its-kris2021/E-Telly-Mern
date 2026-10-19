@@ -57,11 +57,65 @@ export function barangayLabel(key) {
 }
 
 // MGB-documented high-susceptibility barangays (eastern Antipolo / Sierra
-// Madre foothills). Used both in landslide alert copy (services/landslideAlerts.js)
-// and as a static feature in the risk model's feature vector
-// (services/riskFeatures.js) — a genuinely useful signal that requires zero
-// accumulated report data.
+// Madre foothills). Used only in landslide alert copy (services/landslideAlerts.js)
+// as a human-readable area note — the risk model's ML feature now uses the
+// continuous, shapefile-derived distance tables below instead of this
+// coarse 4-barangay list (see LANDSLIDE_HAZARD_DISTANCE_KM).
 export const HIGH_SUSCEPTIBILITY_BARANGAYS = ["calawis", "dalig", "sanjose", "mambugan"];
+
+// Distance (km) from each barangay centroid to the nearest polygon boundary
+// of the "High" hazard class (class 3) in official NOAH/MGB-style hazard
+// shapefiles for Rizal province — Rizal_LandslideHazards.shp (field "LH")
+// and Rizal_Flood_25year.shp (field "Var", 25-year return period), both
+// GCS_WGS_1984. Computed once via a point-to-polygon-boundary nearest-edge
+// search (equirectangular approximation at lat 14.6°N) — see
+// scripts/computeHazardDistances.py for the exact method, kept for
+// reproducibility since the 49MB/13MB source shapefiles aren't checked in
+// to this repo.
+//
+// This is deliberately NOT derived from citizen reports and NOT a hand-picked
+// barangay list: it's a continuous feature grounded in third-party geohazard
+// mapping, used by services/riskFeatures.js as the risk model's susceptibility
+// input. 0 km means the centroid falls inside a High-hazard polygon.
+export const LANDSLIDE_HAZARD_DISTANCE_KM = {
+  bagongnayon:  0.385,
+  beverlyhills: 0.241,
+  calawis:      0.280,
+  cupang:       1.499,
+  dalig:        0.998,
+  delapaz:      0.266,
+  inarawan:     0.171,
+  mambugan:     0.621,
+  mayamot:      0.967,
+  muntindilaw:  1.248,
+  private:      0.826,
+  sanisidro:    0.558,
+  sanjose:      0.229,
+  sanjuan:      0.430,
+  sanluis:      0.451,
+  sanroque:     0.767,
+  santacruz:    0.538,
+};
+
+export const FLOOD_HAZARD_DISTANCE_KM = {
+  bagongnayon:  0.056,
+  beverlyhills: 0.111,
+  calawis:      2.137,
+  cupang:       0.082,
+  dalig:        0.104,
+  delapaz:      0.061,
+  inarawan:     0.002,
+  mambugan:     0.151,
+  mayamot:      0.132,
+  muntindilaw:  0.114,
+  private:      0.119,
+  sanisidro:    0.132,
+  sanjose:      2.058,
+  sanjuan:      0.215,
+  sanluis:      0.192,
+  sanroque:     0.040,
+  santacruz:    0.125,
+};
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;

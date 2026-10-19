@@ -110,6 +110,12 @@ export const SOURCE_CONFIG = {
     text: "text-orange-700",
     border: "border-orange-200",
   },
+  ai: {
+    label: "AI Prediction",
+    bg: "bg-violet-50",
+    text: "text-violet-700",
+    border: "border-violet-200",
+  },
 };
 
 export const SEVERITY_CONFIG = {

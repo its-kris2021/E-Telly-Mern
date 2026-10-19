@@ -8,6 +8,7 @@ import FilterTabs from "../components/alerts/FilterTabs";
 import CreateAlertModal from "../components/alerts/CreateAlertModal";
 import DismissConfirmModal from "../components/alerts/DismissConfirmModal";
 import ModelPerformancePanel from "../components/admin/ModelPerformancePanel";
+import AiPredictionReviewPanel from "../components/admin/AiPredictionReviewPanel";
 import { getUserRole } from "../config/roleModules";
 
 export default function AlertsPage() {
@@ -20,15 +21,27 @@ export default function AlertsPage() {
   // full-ops privileges now live on "cdrrmo" — barangay_official still
   // doesn't see these CDRRMO-only panels.
   const isAdmin = getUserRole() === "cdrrmo";
+  // AI prediction review is NOT cdrrmo-only — the server's confirm/reject
+  // routes allow "cdrrmo" or "barangay_official" (routes/alerts.js), since a
+  // barangay official is the one who'd actually know if a predicted flood/
+  // landslide in their own barangay happened or not.
+  const canReviewAi = ["cdrrmo", "barangay_official"].includes(getUserRole());
 
   const [showModal,      setShowModal]      = useState(false);
   const [activeFilter,   setActiveFilter]   = useState("all");
   const [pendingDismiss, setPendingDismiss] = useState(null);
 
+  // Pending (unconfirmed) AI predictions now live in their own review panel
+  // above, with Confirm/Reject actions — excluded here so they don't also
+  // show in the generic feed with just a plain Dismiss button, which
+  // wouldn't record any confirmedOutcome at all.
+  const visibleAlerts = alerts.filter(
+    (a) => !(a.source === "ai" && (a.confirmedOutcome ?? "unconfirmed") === "unconfirmed"),
+  );
   const filtered =
-    activeFilter === "all"     ? alerts :
-    activeFilter === "rescue"  ? alerts.filter((a) => a.type === "rescue") :
-    alerts.filter((a) => a.type !== "rescue" && a.severity === activeFilter);
+    activeFilter === "all"     ? visibleAlerts :
+    activeFilter === "rescue"  ? visibleAlerts.filter((a) => a.type === "rescue") :
+    visibleAlerts.filter((a) => a.type !== "rescue" && a.severity === activeFilter);
 
   const handleDismissConfirm = () => {
     if (pendingDismiss) {
@@ -151,6 +164,9 @@ export default function AlertsPage() {
         onFilterChange={setActiveFilter}
         counts={counts}
       />
+
+      {/* AI predictions awaiting confirm/reject — cdrrmo + barangay_official */}
+      {canReviewAi && <AiPredictionReviewPanel alerts={alerts} />}
 
       {/* Alert list */}
       <AlertList

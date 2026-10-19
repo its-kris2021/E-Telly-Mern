@@ -72,7 +72,7 @@ async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, 
     ...extractSnapshotFeatures(weatherRaw),
     riverDischarge: dischargeRaw ? extractRiverDischargeFeature(dischargeRaw) : 0,
     barangayReportRate30d,
-    susceptibility: susceptibilityFeature(key),
+    susceptibility: susceptibilityFeature(key, hazardType),
   };
   const vector = toFeatureVector(named);
   const standardized = applyStandardization(vector, model.featureMeans, model.featureStds);
@@ -103,7 +103,14 @@ async function checkBarangayHazard({ key, coord, hazardType, model, weatherRaw, 
     lat: coord.lat, lng: coord.lng,
     confidence: probability,
     modelVersion: `${hazardType}-v${model.version}`,
-    expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+    // Was 6h — too short for a human to actually review (the Oct-19 audit
+    // found 22/22 AI alerts all-time auto-expired unreviewed, 6h never gave
+    // the review UI (AiPredictionReviewPanel.jsx) a real chance to be seen)
+    // and shorter than citizen reports can legitimately lag via offline mesh
+    // relay (riskFeatures.js's barangayReportRate30d comment). 24h instead —
+    // long enough for a daily check-in and for a delayed matching report to
+    // still land while the alert is active.
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
   });
 
   console.log(`[PredictionEngine] ${hazardType}/${key} — probability=${probability.toFixed(2)} severity=${severity}`);

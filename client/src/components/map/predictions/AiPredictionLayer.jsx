@@ -71,7 +71,9 @@ function createAiPopup(alert, canModerate) {
       ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">CONFIRMED</span>`
       : outcome === "false_positive"
         ? `<span style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">MARKED FALSE POSITIVE</span>`
-        : `<span style="background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">NOT YET CONFIRMED</span>`;
+        : outcome === "expired_unconfirmed"
+          ? `<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">EXPIRED — NEVER REVIEWED</span>`
+          : `<span style="background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;">NOT YET CONFIRMED</span>`;
 
   const actionButtons =
     canModerate && outcome === "unconfirmed"

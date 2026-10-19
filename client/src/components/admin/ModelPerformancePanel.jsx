@@ -21,8 +21,8 @@ function fmtDate(ts) {
   });
 }
 
-function OutcomeBar({ truePositives, falsePositives, unconfirmed }) {
-  const total = truePositives + falsePositives + unconfirmed;
+function OutcomeBar({ truePositives, falsePositives, unconfirmed, expiredUnconfirmed = 0 }) {
+  const total = truePositives + falsePositives + unconfirmed + expiredUnconfirmed;
   if (total === 0) {
     return <div className="h-2 rounded-full bg-gray-100" />;
   }
@@ -32,6 +32,7 @@ function OutcomeBar({ truePositives, falsePositives, unconfirmed }) {
       {truePositives > 0 && <div style={{ width: pct(truePositives) }} className="bg-green-500 rounded-full" />}
       {falsePositives > 0 && <div style={{ width: pct(falsePositives) }} className="bg-gray-400 rounded-full" />}
       {unconfirmed > 0 && <div style={{ width: pct(unconfirmed) }} className="bg-violet-200 rounded-full" />}
+      {expiredUnconfirmed > 0 && <div style={{ width: pct(expiredUnconfirmed) }} className="bg-amber-200 rounded-full" />}
     </div>
   );
 }
@@ -48,7 +49,7 @@ function StatTile({ label, value }) {
 function HazardSection({ hazardType, data }) {
   const versions = data?.versions ?? [];
   const active = versions.find((v) => v.isActive) ?? versions[0];
-  const outcomes = data?.currentOutcomes ?? { truePositives: 0, falsePositives: 0, unconfirmed: 0 };
+  const outcomes = data?.currentOutcomes ?? { truePositives: 0, falsePositives: 0, unconfirmed: 0, expiredUnconfirmed: 0 };
 
   return (
     <div className="border border-gray-100 rounded-xl p-3">
@@ -76,6 +77,7 @@ function HazardSection({ hazardType, data }) {
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" />Confirmed ({outcomes.truePositives})</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400" />False positive ({outcomes.falsePositives})</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-200" />Unconfirmed ({outcomes.unconfirmed})</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-200" />Expired, never reviewed ({outcomes.expiredUnconfirmed ?? 0})</span>
           </div>
 
           {versions.length > 1 && (

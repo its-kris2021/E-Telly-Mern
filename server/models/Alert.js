@@ -49,9 +49,14 @@ const AlertSchema = new mongoose.Schema({
   // ── AI-predicted alerts only (source: "ai") ──────────────────────────────
   confidence:   { type: Number, default: null }, // model's predicted probability, 0-1
   modelVersion: { type: String, default: null }, // e.g. "flood-v3" — see models/RiskModel.js
+  // "expired_unconfirmed" (distinct from "false_positive") means the alert's
+  // 6h window closed with no admin review and no matching report — nobody
+  // ever judged the prediction right or wrong, so it must not count toward
+  // precision/fieldMetrics as if it had been verified false. Only an actual
+  // admin PATCH .../reject (routes/alerts.js) produces "false_positive".
   confirmedOutcome: {
     type: String,
-    enum: ["unconfirmed", "true_positive", "false_positive"],
+    enum: ["unconfirmed", "true_positive", "false_positive", "expired_unconfirmed"],
     default: "unconfirmed",
   },
   confirmedBy: { type: String, default: null }, // admin userId/name, or "auto:linked_report" / "auto:expired_unconfirmed"

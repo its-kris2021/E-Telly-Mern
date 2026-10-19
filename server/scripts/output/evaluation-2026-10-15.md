@@ -8,12 +8,12 @@ Split: train=27472, val=3111, test=5729 (val starts 2025-04-15, test starts 2025
 
 | Variant | N | Pos | ROC-AUC | PR-AUC | Threshold | Precision | Recall | F1 | FP/barangay/mo |
 |---|---|---|---|---|---|---|---|---|---|
-| Model (all features) | 5729 | 22 | 0.793 | 0.138 | 0.503 | 0.009 | 0.273 | 0.018 | 3.37 |
-| Model (no reportRate30d) | 5729 | 22 | 0.793 | 0.138 | 0.503 | 0.009 | 0.273 | 0.018 | 3.34 |
+| Model (all features) | 5729 | 22 | 0.793 | 0.138 | 0.593 | 0.009 | 0.182 | 0.018 | 2.20 |
+| Model (no reportRate30d) | 5729 | 22 | 0.793 | 0.138 | 0.593 | 0.009 | 0.182 | 0.018 | 2.22 |
 | Rule baseline (approximated) | 5729 | 22 | n/a | n/a | n/a | 0.000 | 0.000 | n/a | 0.05 |
 | Always-no baseline | 5729 | 22 | n/a | n/a | n/a | n/a | 0.000 | n/a | 0.00 |
 
-Overlap: model catches 6 test positive(s) the rule baseline misses; rule baseline catches 0 the model misses.
+Overlap: model catches 4 test positive(s) the rule baseline misses; rule baseline catches 0 the model misses.
 
 ## landslide
 
