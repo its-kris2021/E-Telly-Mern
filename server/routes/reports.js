@@ -95,8 +95,15 @@ router.get("/approved", async (req, res) => {
     // on the map as if a years-old report just happened.
     const query = { status: "approved", importSource: { $ne: "historical_excel_import" } };
 
-    // Filter by emergency type if specified
+    // Filter by emergency type if specified. Validated against an allowlist
+    // (rather than assigned as-is) so a crafted query-string object like
+    // ?emergencyType[$ne]=null can't be passed straight through as a Mongo
+    // operator — req.query parsing turns bracket syntax into nested objects.
+    const VALID_TYPES = ["fire", "flood", "rainfall", "earthquake", "lahar", "typhoon", "storm", "landslide", "rescue", "other"];
     if (emergencyType && emergencyType !== "all") {
+      if (typeof emergencyType !== "string" || !VALID_TYPES.includes(emergencyType)) {
+        return res.status(400).json({ success: false, error: "Invalid emergencyType" });
+      }
       query.emergencyType = emergencyType;
     }
 

@@ -42,9 +42,16 @@ router.get("/", optionalProtect, async (req, res) => {
       $and: [{ $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] }],
     };
 
-    // Their own barangay's alerts, plus city-wide ones (empty barangays
-    // array = applies everywhere, e.g. a citywide CDRRMO typhoon alert).
-    if (req.user?.role === "barangay_official" && req.user.assignedBarangay) {
+    // scope=all — used by the mobile app's Evac Nav hazard map, which needs
+    // every active hazard citywide (a route can pass through a barangay the
+    // resident doesn't live in) rather than the notification-relevance
+    // scoping below, which only ever shows a resident their own barangay's
+    // alerts since a manual alert is almost always resolved to exactly one
+    // barangay (see routes/alerts.js POST's inferredBarangayKey — it's never
+    // actually empty/citywide in practice).
+    if (req.query.scope === "all") {
+      // fall through — no barangay restriction added
+    } else if (req.user?.role === "barangay_official" && req.user.assignedBarangay) {
       matchQuery.$and.push({
         $or: [{ barangays: req.user.assignedBarangay }, { barangays: { $size: 0 } }],
       });

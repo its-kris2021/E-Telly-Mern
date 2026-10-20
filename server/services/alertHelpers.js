@@ -34,7 +34,14 @@ const SEVERITY_PREFIX = {
   advisory: "ℹ️ Advisory",
 };
 
-export async function upsertAlert({ _dedupeKey, source, ...alertData }) {
+// matchExtra narrows which existing document counts as "the same alert"
+// beyond _dedupeKey+isActive — see upsertAiAlert below, which uses this to
+// stop a later prediction cycle from silently overwriting a human-reviewed
+// alert or relabeling one onto a different model version. Defaults to {} so
+// upsertSystemAlert's behavior is completely unchanged.
+export async function upsertAlert({ _dedupeKey, source, ...alertData }, matchExtra = {}) {
+  const matchQuery = { _dedupeKey, isActive: true, ...matchExtra };
+
   // Signing needs the alert's final _id and createdAt, which for an
   // upsert normally aren't known until after the write (a brand-new _id
   // is assigned by MongoDB on insert). Look up whether this is an update
@@ -42,7 +49,7 @@ export async function upsertAlert({ _dedupeKey, source, ...alertData }) {
   // values before the write happens, exactly like the pre-generated-_id
   // pattern used in routes/alerts.js and index.js's Alert.create() calls.
   const existing = await Alert.findOne(
-    { _dedupeKey, isActive: true },
+    matchQuery,
     { _id: 1, createdAt: 1 },
   );
   const _id = existing?._id ?? new mongoose.Types.ObjectId();
@@ -52,7 +59,7 @@ export async function upsertAlert({ _dedupeKey, source, ...alertData }) {
   const signed = signAlert({ ...alertData, source, _id, createdAt, isActive: true });
 
   const result = await Alert.updateOne(
-    { _dedupeKey, isActive: true },
+    matchQuery,
     {
       $set: {
         ...alertData,
@@ -101,8 +108,31 @@ export async function upsertSystemAlert(data) {
 // confidence) and uses softer copy than upsertSystemAlert — these are
 // advisory/unconfirmed by definition, and should never carry the same
 // implied authority as a PAGASA-threshold-triggered evacuation alert.
+//
+// matchExtra: { confirmedOutcome: "unconfirmed", modelVersion: data.modelVersion }
+// — predictionEngine.js's cron can re-score the same barangay/hazard/day many
+// times (every ~30 min). A later cycle only updates THIS SAME alert document
+// in place when it is still (a) unconfirmed and (b) scored by the same model
+// version as before. If an admin already confirmed/rejected it, or a retrain
+// promoted a different model version since it was created, this creates a
+// NEW alert instead of silently overwriting the existing one's modelVersion/
+// confidence — so a human-reviewed outcome and its original model
+// attribution can never be corrupted by a later re-scoring cycle.
+//
+// Trade-off, deliberate and documented rather than hidden: a stale,
+// unreviewed, now-superseded alert from an older model version is left
+// exactly as it was (not deleted or deactivated) until it naturally expires
+// via expiresAt — so two active AI alerts for the same barangay/hazard can
+// briefly coexist across a same-day retrain, or after one is reviewed while
+// still re-firing. This is the cost of refusing to silently relabel
+// attribution; the alternative (skip re-scoring entirely once reviewed or
+// once the version changes) would lose the newer model's signal until the
+// next calendar day instead.
 export async function upsertAiAlert(data) {
-  const isNew = await upsertAlert({ ...data, source: "ai" });
+  const isNew = await upsertAlert(
+    { ...data, source: "ai" },
+    { confirmedOutcome: "unconfirmed", modelVersion: data.modelVersion },
+  );
 
   if (isNew) {
     const barangayName = data.barangays?.[0] ?? "your area";
