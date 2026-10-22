@@ -6,8 +6,6 @@ import {
   Check,
   RotateCcw,
   ChevronDown,
-  ClipboardList,
-  ChevronUp,
   Loader2,
   Plus,
   Phone,
@@ -234,51 +232,6 @@ function fmtTime(ts) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function describeLog(log) {
-  const name = log.user?.name ?? "Unknown";
-  const delta = log.delta > 0 ? `+${log.delta}` : `${log.delta}`;
-  switch (log.action) {
-    case "occupancy_update":
-      return {
-        actor: name,
-        text: `updated occupancy at "${log.centerName}"`,
-        detail: `${log.previousValue} → ${log.newValue} (${delta})`,
-      };
-    case "capacity_update":
-      return {
-        actor: name,
-        text: `changed capacity at "${log.centerName}"`,
-        detail: `${log.previousValue} → ${log.newValue}`,
-      };
-    case "reset":
-      return {
-        actor: name,
-        text: `reset "${log.centerName}"`,
-        detail: `was ${log.previousValue}`,
-      };
-    case "availability_update":
-      return {
-        actor: name,
-        text: `marked "${log.centerName}" as ${log.newValue ? "available" : "unavailable"}`,
-        detail: "",
-      };
-    case "center_created":
-      return {
-        actor: name,
-        text: `added new center "${log.centerName}"`,
-        detail: `capacity: ${log.newValue}`,
-      };
-    case "center_deleted":
-      return {
-        actor: name,
-        text: `deleted center "${log.centerName}"`,
-        detail: "",
-      };
-    default:
-      return { actor: name, text: `modified "${log.centerName}"`, detail: "" };
-  }
 }
 
 // ── Edit modal ────────────────────────────────────────────────────────────────
@@ -556,7 +509,6 @@ export default function EvacuationPage() {
     isOfficial ? getAssignedBarangay() || "muntindilaw" : "muntindilaw",
   );
   const [centers, setCenters] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -564,7 +516,6 @@ export default function EvacuationPage() {
   const [editId, setEditId] = useState(null);
   const [inputId, setInputId] = useState(null);
   const [inputVal, setInputVal] = useState("");
-  const [logsOpen, setLogsOpen] = useState(false);
   const [brgyOpen, setBrgyOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
@@ -587,7 +538,7 @@ export default function EvacuationPage() {
     });
   }
 
-  // ── Fetch centers + logs ────────────────────────────────────────────────────
+  // ── Fetch centers ───────────────────────────────────────────────────────────
   const fetchCenters = useCallback(async (brgy) => {
     setLoading(true);
     setError(null);
@@ -613,42 +564,24 @@ export default function EvacuationPage() {
     }
   }, []);
 
-  const fetchLogs = useCallback(async (brgy) => {
-    try {
-      const data = await apiFetch(
-        `/api/evacuation/logs?barangay=${brgy}&limit=50`,
-      );
-      setLogs(data);
-    } catch {
-      // non-critical
-    }
-  }, []);
-
   useEffect(() => {
     fetchCenters(barangay);
-    fetchLogs(barangay);
-  }, [barangay, fetchCenters, fetchLogs]);
+  }, [barangay, fetchCenters]);
 
   // ── Real-time Socket.IO ─────────────────────────────────────────────────────
   useEffect(() => {
     const socket = connectSocket();
 
-    function onUpdate({ center, log }) {
+    function onUpdate({ center }) {
       setCenters((prev) =>
         prev.map((c) => (c._id === center._id ? { ...c, ...center } : c)),
       );
-      if (log && log.barangay === barangay) {
-        setLogs((prev) => [log, ...prev].slice(0, 50));
-      }
     }
 
     socket.on("evacuation_updated", onUpdate);
 
-    function onDeleted({ centerId, log }) {
+    function onDeleted({ centerId }) {
       setCenters((prev) => prev.filter((c) => c._id !== centerId));
-      if (log && log.barangay === barangay) {
-        setLogs((prev) => [log, ...prev].slice(0, 50));
-      }
     }
 
     socket.on("evacuation_center_deleted", onDeleted);
@@ -663,7 +596,6 @@ export default function EvacuationPage() {
     const handleOnline = () => {
       setIsOffline(false);
       fetchCenters(barangay);
-      fetchLogs(barangay);
     };
     const handleOffline = () => setIsOffline(true);
 
@@ -673,7 +605,7 @@ export default function EvacuationPage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [barangay, fetchCenters, fetchLogs]);
+  }, [barangay, fetchCenters]);
 
   // ── Occupancy adjustment ────────────────────────────────────────────────────
   async function adjust(id, delta) {
@@ -693,7 +625,6 @@ export default function EvacuationPage() {
         method: "PUT",
         body: JSON.stringify({ occupancy: next }),
       });
-      fetchLogs(barangay);
     } catch {
       fetchCenters(barangay);
     } finally {
@@ -727,7 +658,6 @@ export default function EvacuationPage() {
           method: "PUT",
           body: JSON.stringify({ occupancy: next }),
         });
-        fetchLogs(barangay);
       } catch {
         fetchCenters(barangay);
       } finally {
@@ -745,7 +675,6 @@ export default function EvacuationPage() {
         method: "PUT",
         body: JSON.stringify({ capacity }),
       });
-      fetchLogs(barangay);
     } catch {
       fetchCenters(barangay);
     }
@@ -756,7 +685,6 @@ export default function EvacuationPage() {
     if (isOffline) return;
     try {
       await apiFetch(`/api/evacuation/centers/${id}/reset`, { method: "POST" });
-      fetchLogs(barangay);
     } catch {
       fetchCenters(barangay);
     }
@@ -773,7 +701,6 @@ export default function EvacuationPage() {
         method: "PUT",
         body: JSON.stringify({ available }),
       });
-      fetchLogs(barangay);
     } catch {
       fetchCenters(barangay);
     }
@@ -788,7 +715,6 @@ export default function EvacuationPage() {
     if (center.barangay === barangay) {
       setCenters((prev) => [...prev, center]);
     }
-    fetchLogs(barangay);
     setCreateOpen(false);
   }
 
@@ -798,7 +724,6 @@ export default function EvacuationPage() {
     try {
       await apiFetch(`/api/evacuation/centers/${id}`, { method: "DELETE" });
       setCenters((prev) => prev.filter((c) => c._id !== id));
-      fetchLogs(barangay);
       setDeleteId(null);
     } catch {
       fetchCenters(barangay);
@@ -831,10 +756,9 @@ export default function EvacuationPage() {
     BARANGAYS.find((b) => b.value === barangay)?.label ?? barangay;
   const hotlines = BARANGAYS.find((b) => b.value === barangay)?.hotlines ?? [];
 
-  // Evacuation module is CDRRMO-only for occupancy/reset/availability/create
-  // and the activity log. Barangay Official may additionally edit capacity
-  // only, for centers in their own (locked) barangay — enforced server-side
-  // by PUT /centers/:id/capacity.
+  // Evacuation module is CDRRMO-only for occupancy/reset/availability/create.
+  // Barangay Official may additionally edit capacity only, for centers in
+  // their own (locked) barangay — enforced server-side by PUT /centers/:id/capacity.
   const isAdmin = getUserRole() === "cdrrmo";
   const canEditCapacity = isAdmin || isOfficial;
 
@@ -1198,72 +1122,6 @@ export default function EvacuationPage() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Activity log panel — admin only */}
-      {isAdmin && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setLogsOpen((o) => !o)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-              <ClipboardList size={15} className="text-gray-400" />
-              Activity Log
-              {logs.length > 0 && (
-                <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                  {logs.length}
-                </span>
-              )}
-            </div>
-            {logsOpen ? (
-              <ChevronUp size={15} className="text-gray-400" />
-            ) : (
-              <ChevronDown size={15} className="text-gray-400" />
-            )}
-          </button>
-
-          {logsOpen && (
-            <div className="border-t border-gray-100 divide-y divide-gray-50 max-h-80 overflow-y-auto">
-              {logs.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-6">
-                  No activity recorded yet.
-                </p>
-              ) : (
-                logs.map((log) => {
-                  const { actor, text, detail } = describeLog(log);
-                  return (
-                    <div
-                      key={log._id}
-                      className="px-4 py-2.5 flex items-start gap-3"
-                    >
-                      <div className="w-7 h-7 bg-red-50 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                        <span className="text-[10px] font-bold text-red-500">
-                          {actor.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-700">
-                          <span className="font-semibold">{actor}</span>{" "}
-                          <span className="text-gray-500">{text}</span>
-                          {detail && (
-                            <span className="font-mono text-gray-600">
-                              {" "}
-                              — {detail}
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">
-                          {fmtTime(log.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
         </div>
       )}
 
