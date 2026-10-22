@@ -7,7 +7,6 @@ import AlertList from "../components/alerts/AlertList";
 import FilterTabs from "../components/alerts/FilterTabs";
 import CreateAlertModal from "../components/alerts/CreateAlertModal";
 import DismissConfirmModal from "../components/alerts/DismissConfirmModal";
-import ModelPerformancePanel from "../components/admin/ModelPerformancePanel";
 import AiPredictionReviewPanel from "../components/admin/AiPredictionReviewPanel";
 import { getUserRole } from "../config/roleModules";
 
@@ -17,10 +16,6 @@ export default function AlertsPage() {
 
   const { pendingCount, syncing, enqueue, flush } = useOfflineAlertQueue(refresh);
 
-  // Previously role === "admin" (the pre-split ops-admin role); "admin"'s
-  // full-ops privileges now live on "cdrrmo" — barangay_official still
-  // doesn't see these CDRRMO-only panels.
-  const isAdmin = getUserRole() === "cdrrmo";
   // AI prediction review is NOT cdrrmo-only — the server's confirm/reject
   // routes allow "cdrrmo" or "barangay_official" (routes/alerts.js), since a
   // barangay official is the one who'd actually know if a predicted flood/
@@ -178,8 +173,6 @@ export default function AlertsPage() {
         onRetry={refresh}
       />
 
-      {/* AI model performance — admin only */}
-      {isAdmin && <ModelPerformancePanel />}
 
       {/* Create Alert Modal */}
       {showModal && (
