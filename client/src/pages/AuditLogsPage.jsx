@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, History, ChevronLeft, ChevronRight, Calendar, X } from "lucide-react";
+import { Search, History, ChevronLeft, ChevronRight } from "lucide-react";
 
 const API_BASE = import.meta.env.PROD
   ? window.location.origin
@@ -47,8 +47,6 @@ export default function AuditLogsPage() {
   const [page, setPage] = useState(1);
   const [domain, setDomain] = useState("");
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const hasLoaded = useRef(false);
@@ -60,8 +58,6 @@ export default function AuditLogsPage() {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
       if (domain) params.set("domain", domain);
       if (search.trim()) params.set("search", search.trim());
-      if (dateFrom) params.set("from", dateFrom);
-      if (dateTo) params.set("to", `${dateTo}T23:59:59.999`);
 
       const res = await fetch(`${API_BASE}/api/audit-logs?${params.toString()}`, { headers: authHeaders() });
       const data = await res.json();
@@ -80,16 +76,9 @@ export default function AuditLogsPage() {
     const debounce = setTimeout(fetchLogs, search ? 300 : 0);
     return () => clearTimeout(debounce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, domain, search, dateFrom, dateTo]);
+  }, [page, domain, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasDateFilter = dateFrom || dateTo;
-
-  function clearDates() {
-    setDateFrom("");
-    setDateTo("");
-    setPage(1);
-  }
 
   return (
     <div className="p-3 sm:p-6">
@@ -110,36 +99,6 @@ export default function AuditLogsPage() {
           placeholder="Search by actor, target, or action…"
           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300"
         />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg">
-          <Calendar size={14} className="text-gray-400 shrink-0" />
-          <input
-            type="date"
-            value={dateFrom}
-            max={dateTo || undefined}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-            className="text-sm text-gray-700 focus:outline-none"
-          />
-          <span className="text-gray-400 text-sm">–</span>
-          <input
-            type="date"
-            value={dateTo}
-            min={dateFrom || undefined}
-            onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-            className="text-sm text-gray-700 focus:outline-none"
-          />
-        </div>
-        {hasDateFilter && (
-          <button
-            onClick={clearDates}
-            className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700"
-          >
-            <X size={12} />
-            Clear dates
-          </button>
-        )}
       </div>
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
