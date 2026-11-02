@@ -6,7 +6,7 @@
  * services/predictionEngine.js (live, for inference) so both are guaranteed
  * to build features the exact same way and in the exact same order.
  *
- * Kept small and explainable on purpose (6 features): with a capstone-scale
+ * Kept small and explainable on purpose (10 features): with a capstone-scale
  * dataset (tens to low hundreds of labeled barangay-days), a handful of
  * physically-grounded features beats a large feature set that would just
  * overfit.
